@@ -27,6 +27,9 @@ async def async_get_config_entry_diagnostics(
         "family_count": len(coordinator.data.families),
         "device_count": len(coordinator.data.devices),
         "device_discovery_error": coordinator.device_discovery_error,
+        "privacy_device_discovery_error": (
+            coordinator.privacy_device_discovery_error
+        ),
         "families": [
             {"family_id": "**REDACTED**", "name": family.name}
             for family in coordinator.data.families

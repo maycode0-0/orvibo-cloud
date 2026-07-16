@@ -12,12 +12,19 @@ from typing import Any, Final, Mapping, Sequence
 import aiohttp
 
 from .const import ORVIBO_HOSTS
-from .protocol import OrviboDevice, OrviboFamily, build_family_request, parse_families
+from .protocol import (
+    OrviboDevice,
+    OrviboFamily,
+    build_family_request,
+    extract_devices,
+    parse_families,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
 _OAUTH_PATH: Final = "/getOauthToken"
 _FAMILIES_PATH: Final = "/v2/family/statistics/users"
+_PRIVACY_DEVICES_PATH: Final = "/v2/privacyDevice/statistics/users"
 _REQUEST_TIMEOUT: Final = aiohttp.ClientTimeout(total=15)
 
 
@@ -46,11 +53,40 @@ class OrviboAccount:
     access_token: str
     families: tuple[OrviboFamily, ...]
     devices: tuple[OrviboDevice, ...] = ()
+    privacy_device_discovery_error: str | None = None
 
 
 def _is_success(payload: Mapping[str, Any]) -> bool:
     status = payload.get("status", payload.get("code", 0))
     return status in (None, 0, "0", 200, "200")
+
+
+def merge_devices(
+    *device_groups: Sequence[OrviboDevice],
+) -> tuple[OrviboDevice, ...]:
+    """Merge device sources without discarding richer metadata."""
+
+    merged: dict[str, OrviboDevice] = {}
+    for devices in device_groups:
+        for candidate in devices:
+            previous = merged.get(candidate.uid)
+            if previous is None:
+                merged[candidate.uid] = candidate
+                continue
+            merged[candidate.uid] = OrviboDevice(
+                uid=candidate.uid,
+                name=candidate.name or previous.name,
+                model=candidate.model or previous.model,
+                device_type=candidate.device_type or previous.device_type,
+                room=candidate.room or previous.room,
+                parent_uid=candidate.parent_uid or previous.parent_uid,
+                online=(
+                    candidate.online
+                    if candidate.online is not None
+                    else previous.online
+                ),
+            )
+    return tuple(sorted(merged.values(), key=lambda device: device.uid))
 
 
 class OrviboCloudClient:
@@ -91,11 +127,23 @@ class OrviboCloudClient:
                 _LOGGER.debug("Orvibo host %s failed with %s", host, type(err).__name__)
                 continue
 
+            privacy_device_error: str | None = None
+            try:
+                devices = await self._async_privacy_devices(host, token, user_id)
+            except (aiohttp.ClientError, TimeoutError, json.JSONDecodeError) as err:
+                devices = ()
+                privacy_device_error = type(err).__name__
+            except OrviboProtocolError as err:
+                devices = ()
+                privacy_device_error = str(err)
+
             return OrviboAccount(
                 host=host,
                 user_id=user_id,
                 access_token=token,
                 families=families,
+                devices=devices,
+                privacy_device_discovery_error=privacy_device_error,
             )
 
         if auth_rejected:
@@ -162,3 +210,48 @@ class OrviboCloudClient:
         if not _is_success(payload):
             raise OrviboInvalidAuthError("Orvibo rejected the OAuth token")
         return parse_families(payload)
+
+    async def _async_privacy_devices(
+        self,
+        host: str,
+        access_token: str,
+        user_id: str,
+    ) -> tuple[OrviboDevice, ...]:
+        """Fetch privacy devices using the endpoint in the current ZhiJia365 app."""
+
+        body = build_family_request(
+            access_token=access_token,
+            user_id=user_id,
+            timestamp_ms=int(time.time() * 1000),
+            nonce=secrets.randbelow(900000) + 100000,
+        )
+        async with self._session.post(
+            f"https://{host}{_PRIVACY_DEVICES_PATH}",
+            json=body,
+            timeout=_REQUEST_TIMEOUT,
+        ) as response:
+            if response.status in (401, 403):
+                await response.read()
+                raise OrviboProtocolError(
+                    "Privacy-device endpoint rejected the OAuth token"
+                )
+            response.raise_for_status()
+            payload = await response.json(content_type=None)
+
+        if not isinstance(payload, Mapping):
+            raise OrviboProtocolError(
+                "Privacy-device response did not contain an object"
+            )
+        if not _is_success(payload):
+            status = payload.get("status", payload.get("code"))
+            raise OrviboProtocolError(
+                f"Privacy-device request failed (status={status!r})"
+            )
+
+        devices = extract_devices(payload)
+        _LOGGER.debug(
+            "ORVIBO privacy-device REST discovery returned %d devices, keys=%s",
+            len(devices),
+            sorted(payload.keys()),
+        )
+        return devices

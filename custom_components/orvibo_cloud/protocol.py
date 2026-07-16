@@ -167,7 +167,14 @@ def extract_devices(payloads: Any) -> tuple[OrviboDevice, ...]:
         raw_table_name = value.get("tableName")
         if isinstance(raw_table_name, str) and raw_table_name.strip():
             table_name = raw_table_name.strip().lower().replace("_", "")
-        is_device_table = table_name in (None, "device", "devices", "devicelist")
+        is_device_table = table_name in (
+            None,
+            "device",
+            "devices",
+            "devicelist",
+            "privacydevice",
+            "privacydevices",
+        )
 
         uid = _first_text(value, id_keys)
         is_device_row = any(value.get(key) not in (None, "") for key in device_markers)
