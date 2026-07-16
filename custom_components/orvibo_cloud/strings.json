@@ -1,0 +1,54 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect ORVIBO Cloud",
+        "description": "Sign in with the account used by HomeMate or ZhiJia365.",
+        "data": {
+          "email": "Email or account",
+          "password": "Password"
+        }
+      },
+      "family": {
+        "title": "Select family",
+        "description": "Choose the family this integration should use.",
+        "data": {
+          "family_id": "Family"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect ORVIBO Cloud",
+        "description": "Enter the current password for {email}.",
+        "data": {
+          "password": "Password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to ORVIBO Cloud.",
+      "invalid_auth": "The account or password is invalid.",
+      "unknown": "ORVIBO returned an unsupported response.",
+      "no_families": "No family was found for this account."
+    },
+    "abort": {
+      "already_configured": "This ORVIBO account is already configured.",
+      "reauth_successful": "ORVIBO Cloud was reconnected.",
+      "unknown": "The configuration flow lost its account state."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "connection": {
+        "name": "Connection"
+      }
+    },
+    "sensor": {
+      "family": {
+        "name": "Family"
+      },
+      "device_count": {
+        "name": "Devices"
+      }
+    }
+  }
+}

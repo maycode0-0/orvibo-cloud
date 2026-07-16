@@ -1,0 +1,240 @@
+"""Pure helpers for the Orvibo REST protocol."""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+import hashlib
+import hmac
+from typing import Any, Final, Mapping
+
+_HMAC_SECRET: Final = "nQ45RjPtOws96jmH"
+
+
+@dataclass(frozen=True, slots=True)
+class OrviboFamily:
+    """An Orvibo family returned by the cloud API."""
+
+    family_id: str
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
+class OrviboDevice:
+    """A normalized device returned by the ORVIBO binary cloud."""
+
+    uid: str
+    name: str
+    model: str
+    device_type: str
+    room: str
+    parent_uid: str
+    online: bool | None
+
+
+def password_hash(password: str) -> str:
+    """Return the uppercase MD5 representation expected by Orvibo."""
+
+    return hashlib.md5(password.encode("utf-8")).hexdigest().upper()  # noqa: S324
+
+
+def build_family_request(
+    access_token: str,
+    user_id: str,
+    timestamp_ms: int,
+    nonce: int,
+) -> dict[str, str]:
+    """Build and sign a family-list request."""
+
+    body = {
+        "accessToken": access_token,
+        "userId": user_id,
+        "timestamp": str(timestamp_ms),
+        "random": str(nonce),
+    }
+    canonical = "&".join(f"{key}={body[key]}" for key in sorted(body))
+    canonical = f"{canonical}&key={_HMAC_SECRET}"
+    body["sign"] = hmac.new(
+        _HMAC_SECRET.encode("utf-8"),
+        canonical.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest().upper()
+    return body
+
+
+def parse_families(payload: Mapping[str, Any]) -> tuple[OrviboFamily, ...]:
+    """Normalize known family response shapes."""
+
+    raw: Any = payload.get("data", [])
+    if isinstance(raw, Mapping):
+        raw = raw.get("families") or raw.get("familyList") or raw.get("list") or []
+    if not isinstance(raw, list):
+        return ()
+
+    families: list[OrviboFamily] = []
+    seen: set[str] = set()
+    for item in raw:
+        if not isinstance(item, Mapping):
+            continue
+        family_id = str(
+            item.get("familyId") or item.get("family_id") or item.get("id") or ""
+        ).strip()
+        if not family_id or family_id in seen:
+            continue
+        seen.add(family_id)
+        name = str(
+            item.get("familyName") or item.get("family_name") or item.get("name") or family_id
+        ).strip()
+        families.append(OrviboFamily(family_id=family_id, name=name or family_id))
+    return tuple(families)
+
+
+def _first_text(item: Mapping[str, Any], keys: tuple[str, ...]) -> str:
+    for key in keys:
+        value = item.get(key)
+        if value not in (None, ""):
+            return str(value).strip()
+    return ""
+
+
+def _parse_online(value: Any) -> bool | None:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "online", "connected"}:
+            return True
+        if normalized in {"0", "false", "offline", "disconnected"}:
+            return False
+    return None
+
+
+def extract_devices(payloads: Any) -> tuple[OrviboDevice, ...]:
+    """Recursively find and normalize devices in binary protocol payloads."""
+
+    devices: dict[str, OrviboDevice] = {}
+    room_names: dict[str, str] = {}
+    id_keys = (
+        "deviceId",
+        "deviceID",
+        "deviceUid",
+        "deviceUUID",
+        "deviceUuid",
+        "uuid",
+        "uid",
+    )
+    device_markers = (
+        "uid",
+        "extAddr",
+        "deviceName",
+        "devName",
+        "deviceType",
+        "devType",
+        "model",
+        "modelName",
+        "productId",
+        "productID",
+    )
+
+    def collect_room_names(value: Any) -> None:
+        if isinstance(value, list):
+            for child in value:
+                collect_room_names(child)
+            return
+        if not isinstance(value, Mapping):
+            return
+
+        room_id = _first_text(value, ("roomId", "roomID"))
+        room_name = _first_text(value, ("roomName",))
+        if room_id and room_name:
+            room_names[room_id] = room_name
+
+        for child in value.values():
+            if isinstance(child, (Mapping, list)):
+                collect_room_names(child)
+
+    collect_room_names(payloads)
+
+    def visit(value: Any, table_name: str | None = None) -> None:
+        if isinstance(value, list):
+            for child in value:
+                visit(child, table_name)
+            return
+        if not isinstance(value, Mapping):
+            return
+
+        raw_table_name = value.get("tableName")
+        if isinstance(raw_table_name, str) and raw_table_name.strip():
+            table_name = raw_table_name.strip().lower().replace("_", "")
+        is_device_table = table_name in (None, "device", "devices", "devicelist")
+
+        uid = _first_text(value, id_keys)
+        is_device_row = any(value.get(key) not in (None, "") for key in device_markers)
+        if len(uid) >= 6 and is_device_row and is_device_table:
+            room_id = _first_text(value, ("roomId", "roomID"))
+            candidate = OrviboDevice(
+                uid=uid,
+                name=_first_text(
+                    value,
+                    ("deviceName", "devName", "name", "nickName", "nickname"),
+                ),
+                model=_first_text(
+                    value,
+                    (
+                        "model",
+                        "modelName",
+                        "modelId",
+                        "modelID",
+                        "productName",
+                        "productId",
+                        "productID",
+                    ),
+                ),
+                device_type=_first_text(
+                    value,
+                    ("deviceType", "devType", "type", "category", "deviceCategory"),
+                ),
+                room=(
+                    _first_text(value, ("roomName", "room"))
+                    or room_names.get(room_id, "")
+                ),
+                parent_uid=_first_text(
+                    value,
+                    ("parentUid", "parentId", "parentID", "gatewayUid", "hubUid"),
+                ),
+                online=_parse_online(
+                    next(
+                        (
+                            value[key]
+                            for key in ("online", "isOnline", "connected")
+                            if key in value
+                        ),
+                        None,
+                    )
+                ),
+            )
+            previous = devices.get(uid)
+            if previous is None:
+                devices[uid] = candidate
+            else:
+                devices[uid] = OrviboDevice(
+                    uid=uid,
+                    name=candidate.name or previous.name,
+                    model=candidate.model or previous.model,
+                    device_type=candidate.device_type or previous.device_type,
+                    room=candidate.room or previous.room,
+                    parent_uid=candidate.parent_uid or previous.parent_uid,
+                    online=(
+                        candidate.online
+                        if candidate.online is not None
+                        else previous.online
+                    ),
+                )
+
+        for child in value.values():
+            if isinstance(child, (Mapping, list)):
+                visit(child, table_name)
+
+    visit(payloads)
+    return tuple(sorted(devices.values(), key=lambda device: device.uid))

@@ -1,0 +1,81 @@
+"""Tests for ORVIBO AES packet framing."""
+
+from __future__ import annotations
+
+import importlib
+from pathlib import Path
+import sys
+import types
+import unittest
+
+COMPONENT_PATH = (
+    Path(__file__).parents[1] / "custom_components" / "orvibo_cloud"
+)
+
+
+def _load_binary_module():
+    package_name = "orvibo_cloud_binary_test"
+    package = types.ModuleType(package_name)
+    package.__path__ = [str(COMPONENT_PATH)]
+    sys.modules[package_name] = package
+    return importlib.import_module(f"{package_name}.binary")
+
+
+class BinaryProtocolTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        try:
+            cls.binary = _load_binary_module()
+        except ModuleNotFoundError as err:
+            if err.name == "Crypto":
+                raise unittest.SkipTest("pycryptodome is not installed") from err
+            raise
+
+    def test_static_packet_round_trip_and_fragment_reassembly(self) -> None:
+        client = self.binary.OrviboBinaryClient(
+            host="china.orvibo.com",
+            email="account@example.com",
+            password_md5="0" * 32,
+            family_id="family-1",
+        )
+        payload = {"cmd": 230, "familyId": "family-1", "serial": 1}
+        packet = client._build_packet(payload, dynamic=False)
+
+        client._receive_buffer.extend(packet[:17])
+        self.assertEqual(client._extract_frames(), [])
+        client._receive_buffer.extend(packet[17:])
+        self.assertEqual(client._extract_frames(), [payload])
+
+    def test_corrupt_packet_is_rejected(self) -> None:
+        client = self.binary.OrviboBinaryClient(
+            host="china.orvibo.com",
+            email="account@example.com",
+            password_md5="0" * 32,
+            family_id="family-1",
+        )
+        packet = bytearray(client._build_packet({"cmd": 0}, dynamic=False))
+        packet[-1] ^= 0x01
+        self.assertIsNone(client._decode_packet(bytes(packet)))
+
+    def test_device_table_request_matches_captured_app_shape(self) -> None:
+        client = self.binary.OrviboBinaryClient(
+            host="china.orvibo.com",
+            email="account@example.com",
+            password_md5="0" * 32,
+            family_id="f" * 32,
+        )
+        payload = client._device_page_payload(0)
+        packet = client._build_packet(payload, dynamic=False)
+
+        self.assertEqual(payload["cmd"], 147)
+        self.assertEqual(payload["pageIndex"], 0)
+        self.assertEqual(payload["dataType"], "all")
+        self.assertNotIn("lastUpdateTime", payload)
+        self.assertEqual(len(packet), 282)
+
+        next_page = client._device_page_payload(1)
+        self.assertEqual(next_page["lastUpdateTime"], 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
