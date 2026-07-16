@@ -18,7 +18,7 @@ from .api import (
     OrviboInvalidAuthError,
     OrviboProtocolError,
 )
-from .binary import discover_devices
+from .binary import OrviboBinaryError, discover_devices
 from .const import (
     CONF_FAMILY_ID,
     CONF_HOST,
@@ -70,11 +70,14 @@ class OrviboCloudCoordinator(DataUpdateCoordinator[OrviboAccount]):
                 self.entry.data[CONF_FAMILY_ID],
             )
         except Exception as err:  # noqa: BLE001 - keep REST account available
-            self.device_discovery_error = type(err).__name__
+            error_detail = (
+                str(err) if isinstance(err, OrviboBinaryError) else type(err).__name__
+            )
+            self.device_discovery_error = error_detail
             previous_devices = self.data.devices if self.data is not None else ()
             _LOGGER.warning(
-                "ORVIBO device discovery failed with %s; keeping %d prior devices",
-                type(err).__name__,
+                "ORVIBO device discovery failed: %s; keeping %d prior devices",
+                error_detail,
                 len(previous_devices),
             )
             devices = previous_devices

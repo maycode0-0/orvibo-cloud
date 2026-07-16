@@ -46,6 +46,22 @@ class BinaryProtocolTests(unittest.TestCase):
         client._receive_buffer.extend(packet[17:])
         self.assertEqual(client._extract_frames(), [payload])
 
+    def test_fragment_reassembly_preserves_split_magic_prefix(self) -> None:
+        client = self.binary.OrviboBinaryClient(
+            host="china.orvibo.com",
+            email="account@example.com",
+            password_md5="0" * 32,
+            family_id="family-1",
+        )
+        payload = {"cmd": 0, "key": "0123456789ABCDEF"}
+        packet = client._build_packet(payload, dynamic=False)
+
+        client._receive_buffer.extend(packet[:1])
+        self.assertEqual(client._extract_frames(), [])
+        client._receive_buffer.extend(packet[1:])
+
+        self.assertEqual(client._extract_frames(), [payload])
+
     def test_corrupt_packet_is_rejected(self) -> None:
         client = self.binary.OrviboBinaryClient(
             host="china.orvibo.com",
@@ -75,6 +91,24 @@ class BinaryProtocolTests(unittest.TestCase):
 
         next_page = client._device_page_payload(1)
         self.assertEqual(next_page["lastUpdateTime"], 0)
+
+    def test_login_rejection_includes_safe_status_detail(self) -> None:
+        client = self.binary.OrviboBinaryClient(
+            host="china.orvibo.com",
+            email="account@example.com",
+            password_md5="0" * 32,
+            family_id="family-1",
+        )
+        client._send = lambda payload: None
+        client._receive = lambda timeout, idle_timeout: [
+            {"cmd": 2, "status": 5, "message": "do not expose server text"}
+        ]
+
+        with self.assertRaisesRegex(
+            self.binary.OrviboBinaryError,
+            r"login was rejected \(status=5\)",
+        ):
+            client._login()
 
 
 if __name__ == "__main__":

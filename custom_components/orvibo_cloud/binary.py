@@ -173,7 +173,11 @@ class OrviboBinaryClient:
         while True:
             start = self._receive_buffer.find(b"hd")
             if start < 0:
-                self._receive_buffer.clear()
+                # Keep a possible split frame marker for the next socket read.
+                if self._receive_buffer.endswith(b"h"):
+                    self._receive_buffer[:] = b"h"
+                else:
+                    self._receive_buffer.clear()
                 break
             if start:
                 del self._receive_buffer[:start]
@@ -234,7 +238,11 @@ class OrviboBinaryClient:
             None,
         )
         if response is None:
-            raise OrviboBinaryError("ORVIBO binary handshake did not return a key")
+            commands = [packet.get("cmd") for packet in packets]
+            raise OrviboBinaryError(
+                "ORVIBO binary handshake did not return a key "
+                f"(packets={len(packets)}, commands={commands})"
+            )
         self._dynamic_key = str(response["key"]).encode("utf-8")[:16]
         if len(self._dynamic_key) != 16:
             raise OrviboBinaryError("ORVIBO binary handshake returned an invalid key")
@@ -257,8 +265,17 @@ class OrviboBinaryClient:
         self._send(payload)
         packets = self._receive(timeout=10, idle_timeout=1)
         response = next((packet for packet in packets if packet.get("cmd") == 2), None)
-        if response is None or response.get("status") not in (None, 0, "0"):
-            raise OrviboBinaryError("ORVIBO binary login failed")
+        if response is None:
+            commands = [packet.get("cmd") for packet in packets]
+            raise OrviboBinaryError(
+                "ORVIBO binary login did not return a response "
+                f"(packets={len(packets)}, commands={commands})"
+            )
+        if response.get("status") not in (None, 0, "0"):
+            raise OrviboBinaryError(
+                "ORVIBO binary login was rejected "
+                f"(status={response.get('status')!r})"
+            )
         return packets
 
     def _device_page_payload(self, page_index: int) -> dict[str, Any]:
