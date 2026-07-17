@@ -8,7 +8,7 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.const import CONF_AREA_ID, CONF_EMAIL, CONF_PASSWORD
+from homeassistant.const import ATTR_AREA_ID, CONF_EMAIL, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResult
 from homeassistant.helpers import area_registry as ar, selector
@@ -77,9 +77,9 @@ def _area_schema(default_area_id: str | None) -> vol.Schema:
     """Build one device-area selector with an optional discovered default."""
 
     key = (
-        vol.Optional(CONF_AREA_ID, default=default_area_id)
+        vol.Optional(ATTR_AREA_ID, default=default_area_id)
         if default_area_id
-        else vol.Optional(CONF_AREA_ID)
+        else vol.Optional(ATTR_AREA_ID)
     )
     return vol.Schema({key: selector.AreaSelector()})
 
@@ -275,7 +275,7 @@ class OrviboCloudConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
         device = devices[self._area_index]
         if user_input is not None:
-            self._pending_device_areas[device.uid] = user_input.get(CONF_AREA_ID)
+            self._pending_device_areas[device.uid] = user_input.get(ATTR_AREA_ID)
             self._area_index += 1
             if self._area_index >= len(devices):
                 return self.async_create_entry(
@@ -467,7 +467,7 @@ class OrviboCloudOptionsFlow(config_entries.OptionsFlow):
 
         device = devices[self._area_index]
         if user_input is not None:
-            self._device_areas[device.uid] = user_input.get(CONF_AREA_ID)
+            self._device_areas[device.uid] = user_input.get(ATTR_AREA_ID)
             self._area_index += 1
             if self._area_index >= len(devices):
                 selected_set = set(self._selected_ids)

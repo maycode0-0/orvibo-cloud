@@ -45,6 +45,19 @@ class ConfigFlowStructureTests(unittest.TestCase):
         self.assertNotIn("_reauth_entry", user_names)
         self.assertIn("_reauth_entry", reauth_names)
 
+    def test_config_flow_only_imports_available_home_assistant_constants(self) -> None:
+        tree = ast.parse(CONFIG_FLOW.read_text(encoding="utf-8"))
+        const_import = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.ImportFrom)
+            and node.module == "homeassistant.const"
+        )
+        imported_names = {alias.name for alias in const_import.names}
+
+        self.assertNotIn("CONF_AREA_ID", imported_names)
+        self.assertIn("ATTR_AREA_ID", imported_names)
+
     def test_first_login_requires_device_and_area_steps(self) -> None:
         flow_class = self._classes()["OrviboCloudConfigFlow"]
         methods = {
