@@ -110,6 +110,48 @@ class BinaryProtocolTests(unittest.TestCase):
         ):
             client._login()
 
+    def test_control_payload_matches_captured_app_shape(self) -> None:
+        client = self.binary.OrviboBinaryClient(
+            host="china.orvibo.com",
+            email="account@example.com",
+            password_md5="0" * 32,
+            family_id="family-1",
+        )
+
+        payload = client._control_payload("device-1", "open", 67, 146, 250, 0)
+
+        self.assertEqual(payload["cmd"], 15)
+        self.assertEqual(payload["uid"], "device-1")
+        self.assertEqual(payload["deviceId"], "device-1")
+        self.assertEqual(payload["groupId"], "")
+        self.assertEqual(payload["order"], "open")
+        self.assertEqual(payload["value1"], 67)
+        self.assertEqual(payload["value2"], 146)
+        self.assertEqual(payload["value3"], 250)
+        self.assertEqual(payload["qualityOfService"], 1)
+        self.assertEqual(payload["defaultResponse"], 1)
+        self.assertEqual(payload["propertyResponse"], 0)
+
+    def test_control_returns_cmd_42_state_values(self) -> None:
+        client = self.binary.OrviboBinaryClient(
+            host="china.orvibo.com",
+            email="account@example.com",
+            password_md5="0" * 32,
+            family_id="family-1",
+        )
+        client._connect = lambda: None
+        client._handshake = lambda: []
+        client._login = lambda: []
+        client._send = lambda payload: None
+        client._receive = lambda timeout, idle_timeout: [
+            {"cmd": 42, "value1": 1, "value2": 146, "value3": 250, "value4": 0}
+        ]
+
+        self.assertEqual(
+            client.control_device("device-1", "fast color temperature", 0, 146, 250),
+            (1, 146, 250, 0),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

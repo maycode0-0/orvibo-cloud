@@ -32,7 +32,7 @@ _KEY_PATH: Final = Path(__file__).with_name("orvibo_client_key.pem")
 
 
 class OrviboBinaryError(Exception):
-    """Raised when ORVIBO binary discovery fails."""
+    """Raised when an ORVIBO binary operation fails."""
 
 
 class OrviboBinaryClient:
@@ -80,6 +80,58 @@ class OrviboBinaryClient:
             shapes,
         )
         return devices
+
+    def control_device(
+        self,
+        device_id: str,
+        order: str,
+        value1: int,
+        value2: int = 0,
+        value3: int = 0,
+        value4: int = 0,
+    ) -> tuple[int | None, int | None, int | None, int | None]:
+        """Open a binary session and send one device control command."""
+
+        try:
+            self._connect()
+            self._handshake()
+            self._login()
+            self._send(
+                self._control_payload(
+                    device_id,
+                    order,
+                    value1,
+                    value2,
+                    value3,
+                    value4,
+                )
+            )
+            packets = self._receive(timeout=10, idle_timeout=1)
+        finally:
+            self.close()
+
+        response = next(
+            (
+                packet
+                for packet in packets
+                if packet.get("cmd") == 42 or "status" in packet
+            ),
+            None,
+        )
+        if response is None:
+            raise OrviboBinaryError("ORVIBO control did not return a response")
+        if response.get("status") not in (None, 0, "0"):
+            raise OrviboBinaryError(
+                "ORVIBO control was rejected "
+                f"(status={response.get('status')!r})"
+            )
+        values: list[int | None] = []
+        for key in ("value1", "value2", "value3", "value4"):
+            try:
+                values.append(int(response[key]))
+            except (KeyError, TypeError, ValueError):
+                values.append(None)
+        return values[0], values[1], values[2], values[3]
 
     def close(self) -> None:
         if self._socket is not None:
@@ -304,6 +356,37 @@ class OrviboBinaryClient:
         self._send(payload)
         return self._receive(timeout=8, idle_timeout=2)
 
+    def _control_payload(
+        self,
+        device_id: str,
+        order: str,
+        value1: int,
+        value2: int = 0,
+        value3: int = 0,
+        value4: int = 0,
+    ) -> dict[str, Any]:
+        """Build the cmd=15 payload used by the current app for device control."""
+
+        payload = self._base_payload(15)
+        payload.update(
+            {
+                "uid": device_id,
+                "userName": self._email,
+                "deviceId": device_id,
+                "groupId": "",
+                "order": order,
+                "value1": value1,
+                "value2": value2,
+                "value3": value3,
+                "value4": value4,
+                "delayTime": 0,
+                "qualityOfService": 1,
+                "defaultResponse": 1,
+                "propertyResponse": 0,
+            }
+        )
+        return payload
+
     def _query_devices(self) -> list[dict[str, Any]]:
         """Download the complete paginated device table and online state."""
 
@@ -339,3 +422,25 @@ def discover_devices(
     """Executor-friendly entry point for ORVIBO device discovery."""
 
     return OrviboBinaryClient(host, email, password_md5, family_id).discover()
+
+
+def control_device(
+    host: str,
+    email: str,
+    password_md5: str,
+    family_id: str,
+    device_id: str,
+    order: str,
+    value1: int,
+    value2: int = 0,
+    value3: int = 0,
+    value4: int = 0,
+) -> tuple[int | None, int | None, int | None, int | None]:
+    """Send one device command through ORVIBO's mutual-TLS cloud socket."""
+
+    return OrviboBinaryClient(
+        host,
+        email,
+        password_md5,
+        family_id,
+    ).control_device(device_id, order, value1, value2, value3, value4)

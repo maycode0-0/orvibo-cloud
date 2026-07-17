@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import json
 import logging
 import secrets
@@ -52,9 +52,11 @@ class OrviboAccount:
 
     host: str
     user_id: str
-    access_token: str
+    access_token: str = field(repr=False)
     families: tuple[OrviboFamily, ...]
     devices: tuple[OrviboDevice, ...] = ()
+    binary_user_name: str = field(default="", repr=False)
+    binary_password: str = field(default="", repr=False)
     privacy_device_discovery_error: str | None = None
 
 
@@ -94,15 +96,15 @@ class OrviboCloudClient:
             try:
                 token, user_id = await self._async_oauth(host, email, password_md5)
                 families = await self._async_families(host, token, user_id)
-                devices = (
-                    await self._async_readtable_devices(
+                devices, binary_user_name, binary_password = (
+                    await self._async_readtable(
                         host,
                         token,
                         user_id,
                         family_id,
                     )
                     if family_id
-                    else ()
+                    else ((), "", "")
                 )
             except OrviboInvalidAuthError:
                 auth_rejected = True
@@ -119,6 +121,8 @@ class OrviboCloudClient:
                 access_token=token,
                 families=families,
                 devices=devices,
+                binary_user_name=binary_user_name,
+                binary_password=binary_password,
             )
 
         if auth_rejected:
@@ -186,13 +190,13 @@ class OrviboCloudClient:
             raise OrviboInvalidAuthError("Orvibo rejected the OAuth token")
         return parse_families(payload)
 
-    async def _async_readtable_devices(
+    async def _async_readtable(
         self,
         host: str,
         access_token: str,
         user_id: str,
         family_id: str,
-    ) -> tuple[OrviboDevice, ...]:
+    ) -> tuple[tuple[OrviboDevice, ...], str, str]:
         """Fetch the full device snapshot using the current app endpoint."""
 
         now = time.time()
@@ -224,8 +228,33 @@ class OrviboCloudClient:
             raise OrviboProtocolError(f"Readtable request failed (status={status!r})")
 
         devices = parse_readtable_devices(payload)
+        binary_user_name, binary_password = _binary_credentials(payload, user_id)
         _LOGGER.debug(
             "ORVIBO readtable discovery returned %d devices",
             len(devices),
         )
-        return devices
+        return devices, binary_user_name, binary_password
+
+
+def _binary_credentials(
+    payload: Mapping[str, Any],
+    user_id: str,
+) -> tuple[str, str]:
+    """Extract transient port-10002 credentials without logging them."""
+
+    data = payload.get("data")
+    if not isinstance(data, Mapping):
+        return "", ""
+    accounts = data.get("account", [])
+    if isinstance(accounts, Mapping):
+        accounts = [accounts]
+    if not isinstance(accounts, list):
+        return "", ""
+    for account in accounts:
+        if not isinstance(account, Mapping):
+            continue
+        account_user_id = str(account.get("userId") or "").strip()
+        password = str(account.get("password") or "").strip()
+        if account_user_id == user_id and password:
+            return account_user_id, password
+    return "", ""

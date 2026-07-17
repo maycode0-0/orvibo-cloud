@@ -8,14 +8,18 @@ ORVIBO HomeMate and ZhiJia365.
 - Discovers the regional ORVIBO endpoint.
 - Authenticates with `/getOauthToken`.
 - Retrieves and verifies the account family list.
-- Connects to the ORVIBO mutual-TLS binary cloud on port `10002`.
-- Discovers and registers every returned device, including unknown models and
-  child devices, in the Home Assistant Device Registry.
+- Downloads the current app's full device table through
+  `/v2/cmd/app/readtable` and registers every returned device, including
+  unknown models and child devices, in the Home Assistant Device Registry.
+- Controls verified curtain motors and color-temperature lights through the
+  ORVIBO mutual-TLS binary cloud on port `10002`.
 - Supports multiple-family selection and Home Assistant reauthentication.
 - Exposes cloud connectivity, selected family, and device count as diagnostic
   entities.
 - Never stores the plaintext password. The uppercase MD5 credential required by
   ORVIBO is stored instead and must be treated as password-equivalent.
+- Keeps the separate binary-session password returned by `readtable` in memory
+  only; it is excluded from diagnostics and object representations.
 
 This version registers the Giant Eye 2K S1 when ORVIBO includes it in the account
 device list, but does **not** expose it as a `camera` entity. Packet captures show
@@ -43,12 +47,13 @@ The observed login sequence is:
 
 1. `GET https://<region>.orvibo.com/getOauthToken`
 2. `POST https://<region>.orvibo.com/v2/family/statistics/users`
-3. Mutual-TLS binary connection to port `10002` for device commands
+3. Mutual-TLS binary connection to port `10002` for verified device commands
 4. Separate Meari cloud and encrypted P2P sessions for S1 video
 
-Steps 1 through 3 are implemented for read-only device discovery. Device control
-entities are deliberately deferred until command and state mappings are verified
-per device type. Camera video requires another, independent Meari implementation.
+Device discovery is read-only and comes from the REST table snapshot. Control is
+enabled only for packet-capture-verified profiles: type-34 curtains support open,
+close, stop, and position; type-38/subtype-6 lights support power, brightness, and
+color temperature. Camera video requires another, independent Meari implementation.
 
 ## Security
 

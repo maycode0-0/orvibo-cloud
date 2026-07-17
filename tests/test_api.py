@@ -35,6 +35,8 @@ def _load_api_module():
 
     class Platform:
         BINARY_SENSOR = "binary_sensor"
+        COVER = "cover"
+        LIGHT = "light"
         SENSOR = "sensor"
 
     homeassistant_const.Platform = Platform
@@ -89,6 +91,9 @@ class ApiTests(unittest.TestCase):
             {
                 "code": 0,
                 "data": {
+                    "account": [
+                        {"userId": "user-1", "password": "binary-password"}
+                    ],
                     "device": [
                         {
                             "deviceId": "camera-device-01",
@@ -116,8 +121,8 @@ class ApiTests(unittest.TestCase):
                 return_value="0123456789abcdef0123456789abcdef",
             ),
         ):
-            devices = asyncio.run(
-                client._async_readtable_devices(
+            devices, binary_user_name, binary_password = asyncio.run(
+                client._async_readtable(
                     "china.orvibo.com",
                     "access",
                     "user-1",
@@ -130,6 +135,21 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(devices[0].model, "S1")
         self.assertEqual(devices[0].room, "Living room")
         self.assertTrue(devices[0].online)
+        self.assertEqual(binary_user_name, "user-1")
+        self.assertEqual(binary_password, "binary-password")
+        self.assertEqual(
+            self.api._binary_credentials(
+                {
+                    "data": {
+                        "account": [
+                            {"userId": "other-user", "password": "other-password"}
+                        ]
+                    }
+                },
+                "user-1",
+            ),
+            ("", ""),
+        )
         self.assertIsNotNone(session.last_post)
         url, body, timeout = session.last_post
         self.assertEqual(

@@ -99,6 +99,7 @@ class ProtocolTests(unittest.TestCase):
                             "uid": "shared-gateway-uid",
                             "deviceName": "Ceiling light",
                             "deviceType": 1,
+                            "subDeviceType": 6,
                             "roomId": "room-1",
                             "parentId": "gateway-device-1",
                             "delFlag": 0,
@@ -116,6 +117,10 @@ class ProtocolTests(unittest.TestCase):
                             "deviceId": "device-child-0001",
                             "uid": "status-row",
                             "online": 1,
+                            "value1": 67,
+                            "value2": 146,
+                            "value3": 250,
+                            "value4": 0,
                             "delFlag": 0,
                         }
                     ],
@@ -129,6 +134,11 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(devices[0].room, "Kitchen")
         self.assertEqual(devices[0].parent_uid, "gateway-device-1")
         self.assertTrue(devices[0].online)
+        self.assertEqual(devices[0].value1, 67)
+        self.assertEqual(devices[0].value2, 146)
+        self.assertEqual(devices[0].value3, 250)
+        self.assertEqual(devices[0].value4, 0)
+        self.assertEqual(devices[0].sub_device_type, "6")
 
     def test_extract_devices_handles_nested_and_duplicate_devices(self) -> None:
         devices = protocol.extract_devices(

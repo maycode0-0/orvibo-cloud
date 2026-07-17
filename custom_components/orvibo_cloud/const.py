@@ -21,5 +21,9 @@ ORVIBO_HOSTS: Final = (
     "usa.orvibo.com",
 )
 
-PLATFORMS: Final = (Platform.BINARY_SENSOR, Platform.SENSOR)
-
+PLATFORMS: Final = (
+    Platform.BINARY_SENSOR,
+    Platform.COVER,
+    Platform.LIGHT,
+    Platform.SENSOR,
+)

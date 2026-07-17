@@ -1,0 +1,60 @@
+"""Tests for command mappings captured from the current ORVIBO app."""
+
+from __future__ import annotations
+
+import importlib.util
+from pathlib import Path
+import sys
+import unittest
+
+MODULE_PATH = (
+    Path(__file__).parents[1]
+    / "custom_components"
+    / "orvibo_cloud"
+    / "control.py"
+)
+SPEC = importlib.util.spec_from_file_location("orvibo_cloud_control", MODULE_PATH)
+assert SPEC is not None and SPEC.loader is not None
+control = importlib.util.module_from_spec(SPEC)
+sys.modules[SPEC.name] = control
+SPEC.loader.exec_module(control)
+
+
+class ControlTests(unittest.TestCase):
+    def test_curtain_positions_use_inverted_orvibo_scale(self) -> None:
+        self.assertEqual(control.curtain_position_command(100).value1, 0)
+        self.assertEqual(control.curtain_position_command(0).value1, 100)
+        self.assertEqual(control.curtain_position_command(33).value1, 67)
+        self.assertEqual(control.curtain_stop_command().order, "stop")
+
+    def test_light_power_mapping_matches_captures(self) -> None:
+        turn_on = control.light_power_command(True, 128, 3817)
+        turn_off = control.light_power_command(False, 128, 3817)
+
+        self.assertEqual(
+            (turn_on.order, turn_on.value1, turn_on.value2, turn_on.value3),
+            ("off", 1, 128, 262),
+        )
+        self.assertEqual(
+            (turn_off.order, turn_off.value1, turn_off.value2, turn_off.value3),
+            ("on", 0, 128, 262),
+        )
+
+    def test_light_brightness_mapping_preserves_kelvin(self) -> None:
+        command = control.light_brightness_command(146, 3000)
+        self.assertEqual(
+            (command.order, command.value1, command.value2, command.value3),
+            ("fast move to level", 0, 146, 3000),
+        )
+
+    def test_light_color_temperature_mapping_uses_mired(self) -> None:
+        command = control.light_color_temp_command(146, 4000)
+        self.assertEqual(
+            (command.order, command.value1, command.value2, command.value3),
+            ("fast color temperature", 0, 146, 250),
+        )
+        self.assertEqual(control.mired_to_kelvin(250), 4000)
+
+
+if __name__ == "__main__":
+    unittest.main()

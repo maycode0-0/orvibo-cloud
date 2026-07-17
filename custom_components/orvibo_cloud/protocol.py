@@ -20,7 +20,7 @@ class OrviboFamily:
 
 @dataclass(frozen=True, slots=True)
 class OrviboDevice:
-    """A normalized device returned by the ORVIBO binary cloud."""
+    """A normalized device returned by ORVIBO Cloud."""
 
     uid: str
     name: str
@@ -29,6 +29,11 @@ class OrviboDevice:
     room: str
     parent_uid: str
     online: bool | None
+    sub_device_type: str = ""
+    value1: int | None = None
+    value2: int | None = None
+    value3: int | None = None
+    value4: int | None = None
 
 
 def password_hash(password: str) -> str:
@@ -167,6 +172,7 @@ def parse_readtable_devices(payload: Mapping[str, Any]) -> tuple[OrviboDevice, .
 
     raw_statuses = data.get("deviceStatus", [])
     online_by_device: dict[str, bool | None] = {}
+    values_by_device: dict[str, tuple[int | None, ...]] = {}
     if isinstance(raw_statuses, list):
         for item in raw_statuses:
             if not isinstance(item, Mapping) or item.get("delFlag") in (1, "1"):
@@ -174,6 +180,13 @@ def parse_readtable_devices(payload: Mapping[str, Any]) -> tuple[OrviboDevice, .
             device_id = _first_text(item, ("deviceId", "deviceID"))
             if device_id:
                 online_by_device[device_id] = _parse_online(item.get("online"))
+                values: list[int | None] = []
+                for key in ("value1", "value2", "value3", "value4"):
+                    try:
+                        values.append(int(item[key]))
+                    except (KeyError, TypeError, ValueError):
+                        values.append(None)
+                values_by_device[device_id] = tuple(values)
 
     raw_devices = data.get("device", [])
     if not isinstance(raw_devices, list):
@@ -193,6 +206,7 @@ def parse_readtable_devices(payload: Mapping[str, Any]) -> tuple[OrviboDevice, .
         online = online_by_device.get(device_id)
         if device_id not in online_by_device:
             online = _parse_online(item.get("online"))
+        values = values_by_device.get(device_id, (None, None, None, None))
         devices[device_id] = OrviboDevice(
             uid=device_id,
             name=_first_text(
@@ -222,6 +236,14 @@ def parse_readtable_devices(payload: Mapping[str, Any]) -> tuple[OrviboDevice, .
                 ("parentUid", "parentId", "parentID", "gatewayUid", "hubUid"),
             ),
             online=online,
+            sub_device_type=_first_text(
+                item,
+                ("subDeviceType", "subDevType"),
+            ),
+            value1=values[0],
+            value2=values[1],
+            value3=values[2],
+            value4=values[3],
         )
 
     return tuple(sorted(devices.values(), key=lambda device: device.uid))
