@@ -17,16 +17,24 @@ class OrviboControlCommand:
 
 
 def curtain_position_command(ha_position: int) -> OrviboControlCommand:
-    """Convert HA's 0=closed convention to ORVIBO's 0=open convention."""
+    """Build a curtain command using the shared 0=closed, 100=open scale."""
 
     position = max(0, min(100, int(ha_position)))
-    return OrviboControlCommand("open", 100 - position)
+    return OrviboControlCommand("open", position)
 
 
 def curtain_stop_command() -> OrviboControlCommand:
     """Build a curtain stop command."""
 
     return OrviboControlCommand("stop", 0)
+
+
+def curtain_position_from_orvibo(value: int | None) -> int | None:
+    """Convert a reported ORVIBO curtain position to Home Assistant."""
+
+    if value is None or not 0 <= value <= 100:
+        return None
+    return value
 
 
 def light_power_command(
@@ -42,6 +50,14 @@ def light_power_command(
         _brightness(brightness),
         kelvin_to_mired(color_temp_kelvin),
     )
+
+
+def light_is_on_from_orvibo(value: int | None) -> bool | None:
+    """Interpret the active-low power state used by verified type-38 lights."""
+
+    if value not in (0, 1):
+        return None
+    return value == 0
 
 
 def light_brightness_command(

@@ -29,6 +29,7 @@ from .control import (
     OrviboControlCommand,
     light_brightness_command,
     light_color_temp_command,
+    light_is_on_from_orvibo,
     light_power_command,
     mired_to_kelvin,
 )
@@ -127,7 +128,7 @@ class OrviboColorTemperatureLight(
         if self._optimistic_on is not None:
             return self._optimistic_on
         device = self._device
-        return None if device is None or device.value1 is None else device.value1 != 0
+        return None if device is None else light_is_on_from_orvibo(device.value1)
 
     @property
     def brightness(self) -> int | None:

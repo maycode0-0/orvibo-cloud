@@ -21,11 +21,15 @@ SPEC.loader.exec_module(control)
 
 
 class ControlTests(unittest.TestCase):
-    def test_curtain_positions_use_inverted_orvibo_scale(self) -> None:
-        self.assertEqual(control.curtain_position_command(100).value1, 0)
-        self.assertEqual(control.curtain_position_command(0).value1, 100)
-        self.assertEqual(control.curtain_position_command(33).value1, 67)
+    def test_curtain_positions_use_home_assistant_scale(self) -> None:
+        self.assertEqual(control.curtain_position_command(100).value1, 100)
+        self.assertEqual(control.curtain_position_command(0).value1, 0)
+        self.assertEqual(control.curtain_position_command(67).value1, 67)
         self.assertEqual(control.curtain_stop_command().order, "stop")
+        self.assertEqual(control.curtain_position_from_orvibo(100), 100)
+        self.assertEqual(control.curtain_position_from_orvibo(0), 0)
+        self.assertEqual(control.curtain_position_from_orvibo(67), 67)
+        self.assertIsNone(control.curtain_position_from_orvibo(101))
 
     def test_light_power_mapping_matches_captures(self) -> None:
         turn_on = control.light_power_command(True, 128, 3817)
@@ -39,6 +43,9 @@ class ControlTests(unittest.TestCase):
             (turn_off.order, turn_off.value1, turn_off.value2, turn_off.value3),
             ("on", 0, 128, 262),
         )
+        self.assertTrue(control.light_is_on_from_orvibo(0))
+        self.assertFalse(control.light_is_on_from_orvibo(1))
+        self.assertIsNone(control.light_is_on_from_orvibo(None))
 
     def test_light_brightness_mapping_preserves_kelvin(self) -> None:
         command = control.light_brightness_command(146, 3000)

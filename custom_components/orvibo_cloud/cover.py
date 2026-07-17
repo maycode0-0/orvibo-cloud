@@ -28,6 +28,7 @@ from .coordinator import OrviboCloudCoordinator
 from .control import (
     OrviboControlCommand,
     curtain_position_command,
+    curtain_position_from_orvibo,
     curtain_stop_command,
 )
 from .protocol import OrviboDevice
@@ -112,10 +113,7 @@ class OrviboCurtainCover(CoordinatorEntity[OrviboCloudCoordinator], CoverEntity)
         device = self._device
         if device is None:
             return None
-        raw_position = device.value1
-        if raw_position is None or not 0 <= raw_position <= 100:
-            return None
-        return 100 - raw_position
+        return curtain_position_from_orvibo(device.value1)
 
     @property
     def is_closed(self) -> bool | None:
@@ -162,9 +160,9 @@ class OrviboCurtainCover(CoordinatorEntity[OrviboCloudCoordinator], CoverEntity)
         except (OrviboBinaryError, OSError, TimeoutError) as err:
             raise HomeAssistantError(str(err)) from err
 
-        reported_position = reported_values[0]
-        if reported_position is not None and 0 <= reported_position <= 100:
-            self._optimistic_position = 100 - reported_position
+        reported_position = curtain_position_from_orvibo(reported_values[0])
+        if reported_position is not None:
+            self._optimistic_position = reported_position
         elif ha_position is not None:
             self._optimistic_position = ha_position
         self.async_write_ha_state()
