@@ -11,6 +11,16 @@
         "description": "选择此集成使用的家庭。",
         "data": {"family_id": "家庭"}
       },
+      "devices": {
+        "title": "选择设备",
+        "description": "只有勾选的设备才会添加到 Home Assistant。",
+        "data": {"selected_device_ids": "设备"}
+      },
+      "area": {
+        "title": "指定设备区域",
+        "description": "为 {device} 选择区域（第 {position}/{total} 台）。欧瑞博中的房间为 {room}。",
+        "data": {"area_id": "区域"}
+      },
       "reauth_confirm": {
         "title": "重新连接欧瑞博云",
         "description": "请输入 {email} 的当前密码。",
@@ -21,12 +31,37 @@
       "cannot_connect": "无法连接欧瑞博云。",
       "invalid_auth": "账号或密码错误。",
       "unknown": "欧瑞博返回了无法识别的数据。",
-      "no_families": "该账号下没有找到家庭。"
+      "no_families": "该账号下没有找到家庭。",
+      "no_devices_selected": "请至少勾选一台设备。"
     },
     "abort": {
       "already_configured": "该欧瑞博账号已经配置。",
       "reauth_successful": "欧瑞博云已重新连接。",
+      "no_devices": "所选家庭中没有发现设备。",
       "unknown": "配置流程中的账号状态已丢失。"
+    }
+  },
+  "options": {
+    "step": {
+      "devices": {
+        "title": "选择设备",
+        "description": "只有勾选的设备才会添加到 Home Assistant。",
+        "data": {"selected_device_ids": "设备"}
+      },
+      "area": {
+        "title": "指定设备区域",
+        "description": "为 {device} 选择区域（第 {position}/{total} 台）。欧瑞博中的房间为 {room}。",
+        "data": {"area_id": "区域"}
+      }
+    },
+    "error": {
+      "cannot_connect": "无法连接欧瑞博云。",
+      "invalid_auth": "账号或密码错误。",
+      "unknown": "欧瑞博返回了无法识别的数据。",
+      "no_devices_selected": "请至少勾选一台设备。"
+    },
+    "abort": {
+      "unknown": "选项流程中的设备状态已丢失。"
     }
   },
   "entity": {

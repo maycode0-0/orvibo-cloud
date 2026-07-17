@@ -11,6 +11,16 @@
         "description": "Choose the family this integration should use.",
         "data": {"family_id": "Family"}
       },
+      "devices": {
+        "title": "Select devices",
+        "description": "Only checked devices will be added to Home Assistant.",
+        "data": {"selected_device_ids": "Devices"}
+      },
+      "area": {
+        "title": "Assign device area",
+        "description": "Choose an area for {device} ({position} of {total}). The ORVIBO room is {room}.",
+        "data": {"area_id": "Area"}
+      },
       "reauth_confirm": {
         "title": "Reconnect ORVIBO Cloud",
         "description": "Enter the current password for {email}.",
@@ -21,12 +31,37 @@
       "cannot_connect": "Could not connect to ORVIBO Cloud.",
       "invalid_auth": "The account or password is invalid.",
       "unknown": "ORVIBO returned an unsupported response.",
-      "no_families": "No family was found for this account."
+      "no_families": "No family was found for this account.",
+      "no_devices_selected": "Select at least one device."
     },
     "abort": {
       "already_configured": "This ORVIBO account is already configured.",
       "reauth_successful": "ORVIBO Cloud was reconnected.",
+      "no_devices": "No devices were found in the selected family.",
       "unknown": "The configuration flow lost its account state."
+    }
+  },
+  "options": {
+    "step": {
+      "devices": {
+        "title": "Select devices",
+        "description": "Only checked devices will be added to Home Assistant.",
+        "data": {"selected_device_ids": "Devices"}
+      },
+      "area": {
+        "title": "Assign device area",
+        "description": "Choose an area for {device} ({position} of {total}). The ORVIBO room is {room}.",
+        "data": {"area_id": "Area"}
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not connect to ORVIBO Cloud.",
+      "invalid_auth": "The account or password is invalid.",
+      "unknown": "ORVIBO returned an unsupported response.",
+      "no_devices_selected": "Select at least one device."
+    },
+    "abort": {
+      "unknown": "The options flow lost its device state."
     }
   },
   "entity": {

@@ -32,6 +32,7 @@ from .control import (
     curtain_stop_command,
 )
 from .protocol import OrviboDevice
+from .selection import device_is_selected
 
 _CURTAIN_DEVICE_TYPE = "34"
 
@@ -48,6 +49,7 @@ async def async_setup_entry(
         OrviboCurtainCover(coordinator, device.uid)
         for device in coordinator.data.devices
         if device.device_type == _CURTAIN_DEVICE_TYPE
+        and device_is_selected(entry.options, device.uid)
     )
 
 

@@ -34,6 +34,7 @@ from .control import (
     mired_to_kelvin,
 )
 from .protocol import OrviboDevice
+from .selection import device_is_selected
 
 _LIGHT_DEVICE_TYPE = "38"
 _LIGHT_SUB_DEVICE_TYPE = "6"
@@ -54,6 +55,7 @@ async def async_setup_entry(
         for device in coordinator.data.devices
         if device.device_type == _LIGHT_DEVICE_TYPE
         and _is_supported_light(device)
+        and device_is_selected(entry.options, device.uid)
     )
 
 

@@ -31,18 +31,20 @@ class ControlTests(unittest.TestCase):
         self.assertEqual(control.curtain_position_from_orvibo(67), 67)
         self.assertIsNone(control.curtain_position_from_orvibo(101))
 
-    def test_light_power_mapping_matches_captures(self) -> None:
+    def test_light_power_mapping_matches_active_low_state(self) -> None:
         turn_on = control.light_power_command(True, 128, 3817)
         turn_off = control.light_power_command(False, 128, 3817)
 
         self.assertEqual(
             (turn_on.order, turn_on.value1, turn_on.value2, turn_on.value3),
-            ("off", 1, 128, 262),
+            ("on", 0, 128, 262),
         )
         self.assertEqual(
             (turn_off.order, turn_off.value1, turn_off.value2, turn_off.value3),
-            ("on", 0, 128, 262),
+            ("off", 1, 128, 262),
         )
+        self.assertTrue(control.light_is_on_from_orvibo(turn_on.value1))
+        self.assertFalse(control.light_is_on_from_orvibo(turn_off.value1))
         self.assertTrue(control.light_is_on_from_orvibo(0))
         self.assertFalse(control.light_is_on_from_orvibo(1))
         self.assertIsNone(control.light_is_on_from_orvibo(None))

@@ -9,8 +9,11 @@ ORVIBO HomeMate and ZhiJia365.
 - Authenticates with `/getOauthToken`.
 - Retrieves and verifies the account family list.
 - Downloads the current app's full device table through
-  `/v2/cmd/app/readtable` and registers every returned device, including
-  unknown models and child devices, in the Home Assistant Device Registry.
+  `/v2/cmd/app/readtable`, lets the user select which devices to add, and only
+  registers the selected devices in the Home Assistant Device Registry.
+- Assigns each selected device to its discovered ORVIBO room by default and
+  allows choosing another Home Assistant area during setup or later from the
+  integration's configuration dialog.
 - Controls verified curtain motors and color-temperature lights through the
   ORVIBO mutual-TLS binary cloud on port `10002`.
 - Supports multiple-family selection and Home Assistant reauthentication.

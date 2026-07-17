@@ -42,11 +42,11 @@ def light_power_command(
     brightness: int,
     color_temp_kelvin: int,
 ) -> OrviboControlCommand:
-    """Build the app's non-intuitive on/off command mapping."""
+    """Build an active-low light power command."""
 
     return OrviboControlCommand(
-        "off" if is_on else "on",
-        1 if is_on else 0,
+        "on" if is_on else "off",
+        0 if is_on else 1,
         _brightness(brightness),
         kelvin_to_mired(color_temp_kelvin),
     )
