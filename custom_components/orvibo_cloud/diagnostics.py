@@ -10,6 +10,7 @@ from homeassistant.core import HomeAssistant
 
 from .const import CONF_PASSWORD_HASH, CONF_USER_ID, DOMAIN
 from .coordinator import OrviboCloudCoordinator
+from .selection import device_is_selected
 
 _TO_REDACT = {CONF_PASSWORD_HASH, CONF_USER_ID}
 
@@ -40,9 +41,16 @@ async def async_get_config_entry_diagnostics(
                 "name": device.name,
                 "model": device.model,
                 "device_type": device.device_type,
+                "sub_device_type": device.sub_device_type,
                 "room": device.room,
                 "parent_uid": "**REDACTED**" if device.parent_uid else "",
                 "online": device.online,
+                "value1": device.value1,
+                "value2": device.value2,
+                "value3": device.value3,
+                "value4": device.value4,
+                "has_control_uid": bool(device.cloud_uid),
+                "selected": device_is_selected(entry.options, device.uid),
             }
             for device in coordinator.data.devices
         ],

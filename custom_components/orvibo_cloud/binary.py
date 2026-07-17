@@ -90,6 +90,7 @@ class OrviboBinaryClient:
         value2: int = 0,
         value3: int = 0,
         value4: int = 0,
+        properties: Mapping[str, Any] | None = None,
     ) -> tuple[int | None, int | None, int | None, int | None]:
         """Open a binary session and send one device control command."""
 
@@ -108,6 +109,7 @@ class OrviboBinaryClient:
                     value2,
                     value3,
                     value4,
+                    properties,
                 )
             )
             packets = self._receive(timeout=10, idle_timeout=1)
@@ -369,6 +371,7 @@ class OrviboBinaryClient:
         value2: int = 0,
         value3: int = 0,
         value4: int = 0,
+        properties: Mapping[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Build the cmd=15 payload used by the current app for device control."""
 
@@ -390,6 +393,8 @@ class OrviboBinaryClient:
                 "propertyResponse": 0,
             }
         )
+        if properties is not None:
+            payload["properties"] = dict(properties)
         return payload
 
     def _query_devices(self) -> list[dict[str, Any]]:
@@ -441,6 +446,7 @@ def control_device(
     value2: int = 0,
     value3: int = 0,
     value4: int = 0,
+    properties: Mapping[str, Any] | None = None,
 ) -> tuple[int | None, int | None, int | None, int | None]:
     """Send one device command through ORVIBO's mutual-TLS cloud socket."""
 
@@ -457,4 +463,5 @@ def control_device(
         value2,
         value3,
         value4,
+        properties,
     )

@@ -55,8 +55,11 @@ The observed login sequence is:
 
 Device discovery is read-only and comes from the REST table snapshot. Control is
 enabled only for packet-capture-verified profiles: type-34 curtains support open,
-close, stop, and position; type-38/subtype-6 lights support power, brightness, and
-color temperature. Camera video requires another, independent Meari implementation.
+close, stop, and position; type-1/subtype-1 and type-102/subtype-1 light relays
+support power; type-38/subtypes 4, 6, and 13 lights support power, brightness,
+and color temperature; captured type-503/subtype-436 downlights and light strips
+support property-based power plus brightness and color temperature. Camera video
+requires another, independent Meari implementation.
 
 ## Security
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import importlib
 from pathlib import Path
 import sys
@@ -11,6 +12,7 @@ import unittest
 COMPONENT_PATH = (
     Path(__file__).parents[1] / "custom_components" / "orvibo_cloud"
 )
+BINARY_PATH = COMPONENT_PATH / "binary.py"
 
 
 def _load_binary_module():
@@ -19,6 +21,30 @@ def _load_binary_module():
     package.__path__ = [str(COMPONENT_PATH)]
     sys.modules[package_name] = package
     return importlib.import_module(f"{package_name}.binary")
+
+
+class BinaryProtocolStructureTests(unittest.TestCase):
+    def test_control_payload_accepts_and_writes_properties(self) -> None:
+        tree = ast.parse(BINARY_PATH.read_text(encoding="utf-8"))
+        client_class = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.ClassDef) and node.name == "OrviboBinaryClient"
+        )
+        method = next(
+            node
+            for node in client_class.body
+            if isinstance(node, ast.FunctionDef) and node.name == "_control_payload"
+        )
+
+        argument_names = {argument.arg for argument in method.args.args}
+        string_constants = {
+            node.value
+            for node in ast.walk(method)
+            if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        }
+        self.assertIn("properties", argument_names)
+        self.assertIn("properties", string_constants)
 
 
 class BinaryProtocolTests(unittest.TestCase):
@@ -139,6 +165,27 @@ class BinaryProtocolTests(unittest.TestCase):
         self.assertEqual(payload["qualityOfService"], 1)
         self.assertEqual(payload["defaultResponse"], 1)
         self.assertEqual(payload["propertyResponse"], 0)
+        self.assertNotIn("properties", payload)
+
+    def test_property_control_payload_matches_type_503_capture(self) -> None:
+        client = self.binary.OrviboBinaryClient(
+            host="china.orvibo.com",
+            email="account@example.com",
+            password_md5="0" * 32,
+            family_id="family-1",
+        )
+
+        payload = client._control_payload(
+            "device-1",
+            "hardware-uid-1",
+            "set property",
+            0,
+            properties={"onoff": {"status": "on"}},
+        )
+
+        self.assertEqual(payload["order"], "set property")
+        self.assertEqual(payload["value1"], 0)
+        self.assertEqual(payload["properties"], {"onoff": {"status": "on"}})
 
     def test_control_returns_cmd_42_state_values(self) -> None:
         client = self.binary.OrviboBinaryClient(
