@@ -29,6 +29,7 @@ class OrviboDevice:
     room: str
     parent_uid: str
     online: bool | None
+    cloud_uid: str = ""
     sub_device_type: str = ""
     value1: int | None = None
     value2: int | None = None
@@ -236,6 +237,7 @@ def parse_readtable_devices(payload: Mapping[str, Any]) -> tuple[OrviboDevice, .
                 ("parentUid", "parentId", "parentID", "gatewayUid", "hubUid"),
             ),
             online=online,
+            cloud_uid=_first_text(item, ("uid",)),
             sub_device_type=_first_text(
                 item,
                 ("subDeviceType", "subDevType"),

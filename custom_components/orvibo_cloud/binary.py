@@ -84,6 +84,7 @@ class OrviboBinaryClient:
     def control_device(
         self,
         device_id: str,
+        device_uid: str,
         order: str,
         value1: int,
         value2: int = 0,
@@ -92,6 +93,8 @@ class OrviboBinaryClient:
     ) -> tuple[int | None, int | None, int | None, int | None]:
         """Open a binary session and send one device control command."""
 
+        if not device_id or not device_uid:
+            raise OrviboBinaryError("ORVIBO control identifiers are missing")
         try:
             self._connect()
             self._handshake()
@@ -99,6 +102,7 @@ class OrviboBinaryClient:
             self._send(
                 self._control_payload(
                     device_id,
+                    device_uid,
                     order,
                     value1,
                     value2,
@@ -359,6 +363,7 @@ class OrviboBinaryClient:
     def _control_payload(
         self,
         device_id: str,
+        device_uid: str,
         order: str,
         value1: int,
         value2: int = 0,
@@ -370,7 +375,7 @@ class OrviboBinaryClient:
         payload = self._base_payload(15)
         payload.update(
             {
-                "uid": device_id,
+                "uid": device_uid,
                 "userName": self._email,
                 "deviceId": device_id,
                 "groupId": "",
@@ -430,6 +435,7 @@ def control_device(
     password_md5: str,
     family_id: str,
     device_id: str,
+    device_uid: str,
     order: str,
     value1: int,
     value2: int = 0,
@@ -443,4 +449,12 @@ def control_device(
         email,
         password_md5,
         family_id,
-    ).control_device(device_id, order, value1, value2, value3, value4)
+    ).control_device(
+        device_id,
+        device_uid,
+        order,
+        value1,
+        value2,
+        value3,
+        value4,
+    )

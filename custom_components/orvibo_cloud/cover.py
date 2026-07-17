@@ -141,6 +141,9 @@ class OrviboCurtainCover(CoordinatorEntity[OrviboCloudCoordinator], CoverEntity)
         ha_position: int | None,
     ) -> None:
         entry_data = self.coordinator.entry.data
+        device = self._device
+        if device is None or not device.cloud_uid:
+            raise HomeAssistantError("ORVIBO control identifiers are missing")
         try:
             reported_values = await self.hass.async_add_executor_job(
                 control_device,
@@ -149,6 +152,7 @@ class OrviboCurtainCover(CoordinatorEntity[OrviboCloudCoordinator], CoverEntity)
                 self.coordinator.data.binary_password,
                 entry_data[CONF_FAMILY_ID],
                 self._device_id,
+                device.cloud_uid,
                 command.order,
                 command.value1,
                 command.value2,

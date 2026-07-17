@@ -118,10 +118,18 @@ class BinaryProtocolTests(unittest.TestCase):
             family_id="family-1",
         )
 
-        payload = client._control_payload("device-1", "open", 67, 146, 250, 0)
+        payload = client._control_payload(
+            "device-1",
+            "hardware-uid-1",
+            "open",
+            67,
+            146,
+            250,
+            0,
+        )
 
         self.assertEqual(payload["cmd"], 15)
-        self.assertEqual(payload["uid"], "device-1")
+        self.assertEqual(payload["uid"], "hardware-uid-1")
         self.assertEqual(payload["deviceId"], "device-1")
         self.assertEqual(payload["groupId"], "")
         self.assertEqual(payload["order"], "open")
@@ -148,9 +156,30 @@ class BinaryProtocolTests(unittest.TestCase):
         ]
 
         self.assertEqual(
-            client.control_device("device-1", "fast color temperature", 0, 146, 250),
+            client.control_device(
+                "device-1",
+                "hardware-uid-1",
+                "fast color temperature",
+                0,
+                146,
+                250,
+            ),
             (1, 146, 250, 0),
         )
+
+    def test_control_rejects_missing_hardware_uid_before_connecting(self) -> None:
+        client = self.binary.OrviboBinaryClient(
+            host="china.orvibo.com",
+            email="account@example.com",
+            password_md5="0" * 32,
+            family_id="family-1",
+        )
+
+        with self.assertRaisesRegex(
+            self.binary.OrviboBinaryError,
+            "control identifiers are missing",
+        ):
+            client.control_device("device-1", "", "open", 0)
 
 
 if __name__ == "__main__":
