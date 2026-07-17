@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import replace
 import logging
 
 from homeassistant.config_entries import ConfigEntry
@@ -17,9 +16,7 @@ from .api import (
     OrviboCloudClient,
     OrviboInvalidAuthError,
     OrviboProtocolError,
-    merge_devices,
 )
-from .binary import OrviboBinaryError, discover_devices
 from .const import (
     CONF_FAMILY_ID,
     CONF_HOST,
@@ -57,39 +54,13 @@ class OrviboCloudCoordinator(DataUpdateCoordinator[OrviboAccount]):
                 email=self.entry.data[CONF_EMAIL],
                 password_md5=self.entry.data[CONF_PASSWORD_HASH],
                 hosts=(self.entry.data[CONF_HOST],),
+                family_id=self.entry.data[CONF_FAMILY_ID],
             )
         except OrviboInvalidAuthError as err:
             raise ConfigEntryAuthFailed from err
         except (OrviboCannotConnectError, OrviboProtocolError) as err:
             raise UpdateFailed(str(err)) from err
 
-        self.privacy_device_discovery_error = (
-            account.privacy_device_discovery_error
-        )
-        previous_devices = self.data.devices if self.data is not None else ()
-        try:
-            binary_devices = await self.hass.async_add_executor_job(
-                discover_devices,
-                account.host,
-                self.entry.data[CONF_EMAIL],
-                self.entry.data[CONF_PASSWORD_HASH],
-                self.entry.data[CONF_FAMILY_ID],
-            )
-        except Exception as err:  # noqa: BLE001 - keep REST account available
-            error_detail = (
-                str(err) if isinstance(err, OrviboBinaryError) else type(err).__name__
-            )
-            self.device_discovery_error = error_detail
-            _LOGGER.warning(
-                "ORVIBO binary device discovery failed: %s; merging %d prior "
-                "devices with %d REST privacy devices",
-                error_detail,
-                len(previous_devices),
-                len(account.devices),
-            )
-            devices = merge_devices(previous_devices, account.devices)
-        else:
-            self.device_discovery_error = None
-            devices = merge_devices(account.devices, binary_devices)
-
-        return replace(account, devices=devices)
+        self.device_discovery_error = None
+        self.privacy_device_discovery_error = None
+        return account

@@ -57,6 +57,79 @@ class ProtocolTests(unittest.TestCase):
             [("one", "Home"), ("two", "Office")],
         )
 
+    def test_readtable_request_is_stable_and_signed(self) -> None:
+        body = protocol.build_readtable_request(
+            access_token="access",
+            user_id="user-1",
+            family_id="family-1",
+            session_id="session-1",
+            timestamp_ms=1700000000123,
+            serial=1700000000,
+            nonce="0123456789abcdef0123456789abcdef",
+            version="5.2.6.302",
+        )
+
+        self.assertEqual(body["dataType"], "all")
+        self.assertEqual(body["lastUpdateTime"], 0)
+        self.assertEqual(body["userName"], "user-1")
+        self.assertEqual(
+            body["sign"],
+            "709C8461A366ED6563072B2B04ECB4612BE4B582651284554C4EABF0CADCE76D",
+        )
+
+    def test_parse_readtable_devices_joins_only_device_tables(self) -> None:
+        devices = protocol.parse_readtable_devices(
+            {
+                "code": 0,
+                "data": {
+                    "account": {"uid": "account-should-not-be-a-device"},
+                    "gateway": [
+                        {"uid": "gateway-row-should-not-be-a-device", "online": 1}
+                    ],
+                    "room": [
+                        {
+                            "roomId": "room-1",
+                            "roomName": "Kitchen",
+                            "uid": "room-row",
+                        }
+                    ],
+                    "device": [
+                        {
+                            "deviceId": "device-child-0001",
+                            "uid": "shared-gateway-uid",
+                            "deviceName": "Ceiling light",
+                            "deviceType": 1,
+                            "roomId": "room-1",
+                            "parentId": "gateway-device-1",
+                            "delFlag": 0,
+                        },
+                        {
+                            "deviceId": "device-child-0002",
+                            "uid": "shared-gateway-uid",
+                            "deviceName": "Removed curtain",
+                            "deviceType": 34,
+                            "delFlag": 1,
+                        },
+                    ],
+                    "deviceStatus": [
+                        {
+                            "deviceId": "device-child-0001",
+                            "uid": "status-row",
+                            "online": 1,
+                            "delFlag": 0,
+                        }
+                    ],
+                },
+            }
+        )
+
+        self.assertEqual(len(devices), 1)
+        self.assertEqual(devices[0].uid, "device-child-0001")
+        self.assertEqual(devices[0].name, "Ceiling light")
+        self.assertEqual(devices[0].room, "Kitchen")
+        self.assertEqual(devices[0].parent_uid, "gateway-device-1")
+        self.assertTrue(devices[0].online)
+
     def test_extract_devices_handles_nested_and_duplicate_devices(self) -> None:
         devices = protocol.extract_devices(
             [

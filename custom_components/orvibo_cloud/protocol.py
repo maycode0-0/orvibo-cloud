@@ -37,6 +37,18 @@ def password_hash(password: str) -> str:
     return hashlib.md5(password.encode("utf-8")).hexdigest().upper()  # noqa: S324
 
 
+def _sign_request(body: Mapping[str, Any]) -> str:
+    """Sign an ORVIBO REST request using the app's canonical format."""
+
+    canonical = "&".join(f"{key}={body[key]}" for key in sorted(body))
+    canonical = f"{canonical}&key={_HMAC_SECRET}"
+    return hmac.new(
+        _HMAC_SECRET.encode("utf-8"),
+        canonical.encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest().upper()
+
+
 def build_family_request(
     access_token: str,
     user_id: str,
@@ -51,13 +63,38 @@ def build_family_request(
         "timestamp": str(timestamp_ms),
         "random": str(nonce),
     }
-    canonical = "&".join(f"{key}={body[key]}" for key in sorted(body))
-    canonical = f"{canonical}&key={_HMAC_SECRET}"
-    body["sign"] = hmac.new(
-        _HMAC_SECRET.encode("utf-8"),
-        canonical.encode("utf-8"),
-        hashlib.sha256,
-    ).hexdigest().upper()
+    body["sign"] = _sign_request(body)
+    return body
+
+
+def build_readtable_request(
+    access_token: str,
+    user_id: str,
+    family_id: str,
+    session_id: str,
+    timestamp_ms: int,
+    serial: int,
+    nonce: str,
+    version: str,
+) -> dict[str, Any]:
+    """Build the full table snapshot request used by the current app."""
+
+    body: dict[str, Any] = {
+        "accessToken": access_token,
+        "dataType": "all",
+        "deviceFlag": 0,
+        "familyId": family_id,
+        "lastUpdateTime": 0,
+        "pageIndex": 0,
+        "random": nonce,
+        "serial": serial,
+        "sessionId": session_id,
+        "timestamp": timestamp_ms,
+        "userId": user_id,
+        "userName": user_id,
+        "ver": version,
+    }
+    body["sign"] = _sign_request(body)
     return body
 
 
@@ -108,6 +145,86 @@ def _parse_online(value: Any) -> bool | None:
         if normalized in {"0", "false", "offline", "disconnected"}:
             return False
     return None
+
+
+def parse_readtable_devices(payload: Mapping[str, Any]) -> tuple[OrviboDevice, ...]:
+    """Normalize the device table and join its room and online-state tables."""
+
+    data = payload.get("data")
+    if not isinstance(data, Mapping):
+        return ()
+
+    raw_rooms = data.get("room", [])
+    room_names: dict[str, str] = {}
+    if isinstance(raw_rooms, list):
+        for item in raw_rooms:
+            if not isinstance(item, Mapping) or item.get("delFlag") in (1, "1"):
+                continue
+            room_id = _first_text(item, ("roomId", "roomID"))
+            room_name = _first_text(item, ("roomName",))
+            if room_id and room_name:
+                room_names[room_id] = room_name
+
+    raw_statuses = data.get("deviceStatus", [])
+    online_by_device: dict[str, bool | None] = {}
+    if isinstance(raw_statuses, list):
+        for item in raw_statuses:
+            if not isinstance(item, Mapping) or item.get("delFlag") in (1, "1"):
+                continue
+            device_id = _first_text(item, ("deviceId", "deviceID"))
+            if device_id:
+                online_by_device[device_id] = _parse_online(item.get("online"))
+
+    raw_devices = data.get("device", [])
+    if not isinstance(raw_devices, list):
+        return ()
+
+    devices: dict[str, OrviboDevice] = {}
+    for item in raw_devices:
+        if not isinstance(item, Mapping) or item.get("delFlag") in (1, "1"):
+            continue
+        device_id = _first_text(
+            item,
+            ("deviceId", "deviceID", "deviceUid", "deviceUUID", "uid"),
+        )
+        if not device_id:
+            continue
+        room_id = _first_text(item, ("roomId", "roomID"))
+        online = online_by_device.get(device_id)
+        if device_id not in online_by_device:
+            online = _parse_online(item.get("online"))
+        devices[device_id] = OrviboDevice(
+            uid=device_id,
+            name=_first_text(
+                item,
+                ("deviceName", "devName", "name", "nickName", "nickname"),
+            ),
+            model=_first_text(
+                item,
+                (
+                    "model",
+                    "modelName",
+                    "modelId",
+                    "modelID",
+                    "productName",
+                    "productId",
+                    "productID",
+                ),
+            ),
+            device_type=_first_text(
+                item,
+                ("deviceType", "devType", "type", "category", "deviceCategory"),
+            ),
+            room=_first_text(item, ("roomName", "room"))
+            or room_names.get(room_id, ""),
+            parent_uid=_first_text(
+                item,
+                ("parentUid", "parentId", "parentID", "gatewayUid", "hubUid"),
+            ),
+            online=online,
+        )
+
+    return tuple(sorted(devices.values(), key=lambda device: device.uid))
 
 
 def extract_devices(payloads: Any) -> tuple[OrviboDevice, ...]:

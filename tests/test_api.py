@@ -84,95 +84,71 @@ class ApiTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.api = _load_api_module()
 
-    def test_privacy_device_request_uses_current_app_endpoint(self) -> None:
+    def test_readtable_request_uses_current_app_endpoint(self) -> None:
         session = FakeSession(
             {
-                "status": 0,
+                "code": 0,
                 "data": {
-                    "tableName": "privacyDevice",
-                    "dataList": [
+                    "device": [
                         {
                             "deviceId": "camera-device-01",
-                            "deviceName": "Giant Eye 2K",
+                            "deviceName": "Camera",
                             "model": "S1",
                             "deviceType": 200,
-                            "online": 1,
+                            "roomId": "room-1",
                         }
-                    ]
+                    ],
+                    "deviceStatus": [
+                        {"deviceId": "camera-device-01", "online": 1}
+                    ],
+                    "room": [{"roomId": "room-1", "roomName": "Living room"}],
                 },
             }
         )
         client = self.api.OrviboCloudClient(session)
+        client._session_id = "session-0000000000000000000000000"
 
         with (
             patch.object(self.api.time, "time", return_value=1700000000.123),
-            patch.object(self.api.secrets, "randbelow", return_value=23456),
+            patch.object(
+                self.api.secrets,
+                "token_hex",
+                return_value="0123456789abcdef0123456789abcdef",
+            ),
         ):
             devices = asyncio.run(
-                client._async_privacy_devices(
+                client._async_readtable_devices(
                     "china.orvibo.com",
                     "access",
                     "user-1",
+                    "family-1",
                 )
             )
 
         self.assertEqual(len(devices), 1)
         self.assertEqual(devices[0].uid, "camera-device-01")
         self.assertEqual(devices[0].model, "S1")
+        self.assertEqual(devices[0].room, "Living room")
+        self.assertTrue(devices[0].online)
         self.assertIsNotNone(session.last_post)
         url, body, timeout = session.last_post
         self.assertEqual(
             url,
-            "https://china.orvibo.com/v2/privacyDevice/statistics/users",
+            "https://china.orvibo.com/v2/cmd/app/readtable",
         )
         self.assertEqual(body["accessToken"], "access")
         self.assertEqual(body["userId"], "user-1")
-        self.assertEqual(body["random"], "123456")
+        self.assertEqual(body["userName"], "user-1")
+        self.assertEqual(body["familyId"], "family-1")
+        self.assertEqual(body["sessionId"], "session-0000000000000000000000000")
+        self.assertEqual(body["random"], "0123456789abcdef0123456789abcdef")
+        self.assertEqual(body["lastUpdateTime"], 0)
+        self.assertEqual(body["pageIndex"], 0)
+        self.assertEqual(body["dataType"], "all")
+        self.assertEqual(body["deviceFlag"], 0)
+        self.assertEqual(body["ver"], "5.2.6.302")
+        self.assertEqual(len(body["sign"]), 64)
         self.assertEqual(timeout.total, 15)
-
-    def test_merge_devices_keeps_rest_only_camera(self) -> None:
-        device = self.api.OrviboDevice
-        rest_camera = device(
-            uid="camera-device-01",
-            name="Giant Eye 2K",
-            model="S1",
-            device_type="200",
-            room="Living room",
-            parent_uid="",
-            online=None,
-        )
-        binary_camera = device(
-            uid="camera-device-01",
-            name="",
-            model="",
-            device_type="",
-            room="",
-            parent_uid="",
-            online=True,
-        )
-        binary_curtain = device(
-            uid="curtain-device-01",
-            name="Curtain",
-            model="",
-            device_type="34",
-            room="Bedroom",
-            parent_uid="",
-            online=True,
-        )
-
-        devices = self.api.merge_devices(
-            (rest_camera,),
-            (binary_camera, binary_curtain),
-        )
-
-        self.assertEqual(
-            [item.uid for item in devices],
-            ["camera-device-01", "curtain-device-01"],
-        )
-        camera = devices[0]
-        self.assertEqual(camera.name, "Giant Eye 2K")
-        self.assertEqual(camera.model, "S1")
-        self.assertTrue(camera.online)
 
 
 if __name__ == "__main__":

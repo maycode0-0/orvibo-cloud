@@ -16,15 +16,17 @@ from .protocol import (
     OrviboDevice,
     OrviboFamily,
     build_family_request,
-    extract_devices,
+    build_readtable_request,
     parse_families,
+    parse_readtable_devices,
 )
 
 _LOGGER = logging.getLogger(__name__)
 
 _OAUTH_PATH: Final = "/getOauthToken"
 _FAMILIES_PATH: Final = "/v2/family/statistics/users"
-_PRIVACY_DEVICES_PATH: Final = "/v2/privacyDevice/statistics/users"
+_READTABLE_PATH: Final = "/v2/cmd/app/readtable"
+_APP_VERSION: Final = "5.2.6.302"
 _REQUEST_TIMEOUT: Final = aiohttp.ClientTimeout(total=15)
 
 
@@ -61,34 +63,6 @@ def _is_success(payload: Mapping[str, Any]) -> bool:
     return status in (None, 0, "0", 200, "200")
 
 
-def merge_devices(
-    *device_groups: Sequence[OrviboDevice],
-) -> tuple[OrviboDevice, ...]:
-    """Merge device sources without discarding richer metadata."""
-
-    merged: dict[str, OrviboDevice] = {}
-    for devices in device_groups:
-        for candidate in devices:
-            previous = merged.get(candidate.uid)
-            if previous is None:
-                merged[candidate.uid] = candidate
-                continue
-            merged[candidate.uid] = OrviboDevice(
-                uid=candidate.uid,
-                name=candidate.name or previous.name,
-                model=candidate.model or previous.model,
-                device_type=candidate.device_type or previous.device_type,
-                room=candidate.room or previous.room,
-                parent_uid=candidate.parent_uid or previous.parent_uid,
-                online=(
-                    candidate.online
-                    if candidate.online is not None
-                    else previous.online
-                ),
-            )
-    return tuple(sorted(merged.values(), key=lambda device: device.uid))
-
-
 class OrviboCloudClient:
     """Authenticate with Orvibo and retrieve account metadata."""
 
@@ -99,12 +73,14 @@ class OrviboCloudClient:
     ) -> None:
         self._session = session
         self._host = host
+        self._session_id = secrets.token_hex(16)
 
     async def async_discover(
         self,
         email: str,
         password_md5: str,
         hosts: Sequence[str] = ORVIBO_HOSTS,
+        family_id: str | None = None,
     ) -> OrviboAccount:
         """Authenticate against regional hosts and return the first valid account."""
 
@@ -118,6 +94,16 @@ class OrviboCloudClient:
             try:
                 token, user_id = await self._async_oauth(host, email, password_md5)
                 families = await self._async_families(host, token, user_id)
+                devices = (
+                    await self._async_readtable_devices(
+                        host,
+                        token,
+                        user_id,
+                        family_id,
+                    )
+                    if family_id
+                    else ()
+                )
             except OrviboInvalidAuthError:
                 auth_rejected = True
                 continue
@@ -127,23 +113,12 @@ class OrviboCloudClient:
                 _LOGGER.debug("Orvibo host %s failed with %s", host, type(err).__name__)
                 continue
 
-            privacy_device_error: str | None = None
-            try:
-                devices = await self._async_privacy_devices(host, token, user_id)
-            except (aiohttp.ClientError, TimeoutError, json.JSONDecodeError) as err:
-                devices = ()
-                privacy_device_error = type(err).__name__
-            except OrviboProtocolError as err:
-                devices = ()
-                privacy_device_error = str(err)
-
             return OrviboAccount(
                 host=host,
                 user_id=user_id,
                 access_token=token,
                 families=families,
                 devices=devices,
-                privacy_device_discovery_error=privacy_device_error,
             )
 
         if auth_rejected:
@@ -211,47 +186,46 @@ class OrviboCloudClient:
             raise OrviboInvalidAuthError("Orvibo rejected the OAuth token")
         return parse_families(payload)
 
-    async def _async_privacy_devices(
+    async def _async_readtable_devices(
         self,
         host: str,
         access_token: str,
         user_id: str,
+        family_id: str,
     ) -> tuple[OrviboDevice, ...]:
-        """Fetch privacy devices using the endpoint in the current ZhiJia365 app."""
+        """Fetch the full device snapshot using the current app endpoint."""
 
-        body = build_family_request(
+        now = time.time()
+        body = build_readtable_request(
             access_token=access_token,
             user_id=user_id,
-            timestamp_ms=int(time.time() * 1000),
-            nonce=secrets.randbelow(900000) + 100000,
+            family_id=family_id,
+            session_id=self._session_id,
+            timestamp_ms=int(now * 1000),
+            serial=int(now),
+            nonce=secrets.token_hex(16),
+            version=_APP_VERSION,
         )
         async with self._session.post(
-            f"https://{host}{_PRIVACY_DEVICES_PATH}",
+            f"https://{host}{_READTABLE_PATH}",
             json=body,
             timeout=_REQUEST_TIMEOUT,
         ) as response:
             if response.status in (401, 403):
                 await response.read()
-                raise OrviboProtocolError(
-                    "Privacy-device endpoint rejected the OAuth token"
-                )
+                raise OrviboInvalidAuthError("Orvibo rejected the OAuth token")
             response.raise_for_status()
             payload = await response.json(content_type=None)
 
         if not isinstance(payload, Mapping):
-            raise OrviboProtocolError(
-                "Privacy-device response did not contain an object"
-            )
+            raise OrviboProtocolError("Readtable response did not contain an object")
         if not _is_success(payload):
             status = payload.get("status", payload.get("code"))
-            raise OrviboProtocolError(
-                f"Privacy-device request failed (status={status!r})"
-            )
+            raise OrviboProtocolError(f"Readtable request failed (status={status!r})")
 
-        devices = extract_devices(payload)
+        devices = parse_readtable_devices(payload)
         _LOGGER.debug(
-            "ORVIBO privacy-device REST discovery returned %d devices, keys=%s",
+            "ORVIBO readtable discovery returned %d devices",
             len(devices),
-            sorted(payload.keys()),
         )
         return devices
