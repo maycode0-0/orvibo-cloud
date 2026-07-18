@@ -27,6 +27,7 @@ _CLIENT_VERSION: Final = "5.2.6.302"
 _PORT: Final = 10002
 _HEADER_SIZE: Final = 42
 _MAX_DEVICE_PAGES: Final = 20
+_SESSION_RESPONSE_IDLE_TIMEOUT: Final = 0.2
 _CERT_PATH: Final = Path(__file__).with_name("orvibo_client_cert.pem")
 _KEY_PATH: Final = Path(__file__).with_name("orvibo_client_key.pem")
 
@@ -55,6 +56,7 @@ class OrviboBinaryClient:
         self._session_id = "0" * 32
         self._serial = int(time.time())
         self._identifier = secrets.token_hex(8)
+        self._stop_commands: frozenset[int] = frozenset()
 
     def discover(self) -> tuple[OrviboDevice, ...]:
         """Connect, authenticate, query, and normalize all returned devices."""
@@ -112,7 +114,11 @@ class OrviboBinaryClient:
                     properties,
                 )
             )
-            packets = self._receive(timeout=10, idle_timeout=1)
+            packets = self._receive_until_command(
+                command=42,
+                timeout=10,
+                idle_timeout=_SESSION_RESPONSE_IDLE_TIMEOUT,
+            )
         finally:
             self.close()
 
@@ -273,8 +279,28 @@ class OrviboBinaryClient:
                 break
             last_data = time.monotonic()
             self._receive_buffer.extend(data)
-            packets.extend(self._extract_frames())
+            received_packets = self._extract_frames()
+            packets.extend(received_packets)
+            if self._stop_commands and any(
+                packet.get("cmd") in self._stop_commands
+                for packet in received_packets
+            ):
+                break
         return packets
+
+    def _receive_until_command(
+        self,
+        command: int,
+        timeout: float,
+        idle_timeout: float,
+    ) -> list[dict[str, Any]]:
+        """Receive packets until the requested response command arrives."""
+
+        self._stop_commands = frozenset({command})
+        try:
+            return self._receive(timeout=timeout, idle_timeout=idle_timeout)
+        finally:
+            self._stop_commands = frozenset()
 
     def _handshake(self) -> list[dict[str, Any]]:
         payload = self._base_payload(0)
@@ -290,7 +316,11 @@ class OrviboBinaryClient:
             }
         )
         self._send(payload, dynamic=False)
-        packets = self._receive(timeout=10, idle_timeout=1)
+        packets = self._receive_until_command(
+            command=0,
+            timeout=10,
+            idle_timeout=_SESSION_RESPONSE_IDLE_TIMEOUT,
+        )
         response = next(
             (packet for packet in packets if packet.get("cmd") == 0 and packet.get("key")),
             None,
@@ -321,7 +351,11 @@ class OrviboBinaryClient:
             }
         )
         self._send(payload)
-        packets = self._receive(timeout=10, idle_timeout=1)
+        packets = self._receive_until_command(
+            command=2,
+            timeout=10,
+            idle_timeout=_SESSION_RESPONSE_IDLE_TIMEOUT,
+        )
         response = next((packet for packet in packets if packet.get("cmd") == 2), None)
         if response is None:
             commands = [packet.get("cmd") for packet in packets]
