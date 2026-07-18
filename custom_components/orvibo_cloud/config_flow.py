@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from collections.abc import Mapping
 from typing import Any
 
@@ -37,15 +38,46 @@ from .selection import (
 )
 
 
-def _device_label(device: OrviboDevice) -> str:
+_OTHER_DEVICE_CATEGORY = "Other devices"
+
+
+def _device_type_name(device: OrviboDevice) -> str:
+    """Return the normalized type name used to group device choices."""
+
+    model = (device.model or "").strip()
+    if model:
+        return model
+    device_type = (device.device_type or "").strip()
+    return device_type if device_type and not device_type.isdecimal() else ""
+
+
+def _device_label(device: OrviboDevice, category: str | None = None) -> str:
     """Build a readable selector label without exposing a full device ID."""
 
+    category = category or _OTHER_DEVICE_CATEGORY
     name = device.name or device.model or device.device_type or "ORVIBO device"
     details = [
         value for value in (device.room, device.model) if value and value != name
     ]
     details.append(device.uid[-6:])
-    return " | ".join((name, *details))
+    return " | ".join((f"[{category}] {name}", *details))
+
+
+def _device_categories(
+    devices: tuple[OrviboDevice, ...],
+) -> dict[str, str]:
+    """Group repeated type names and fold singleton types into other devices."""
+
+    type_names = Counter(_device_type_name(device) for device in devices)
+    categories: dict[str, str] = {}
+    for device in devices:
+        type_name = _device_type_name(device)
+        categories[device.uid] = (
+            type_name
+            if type_name and type_names[type_name] >= 2
+            else _OTHER_DEVICE_CATEGORY
+        )
+    return categories
 
 
 def _device_schema(
@@ -54,9 +86,22 @@ def _device_schema(
 ) -> vol.Schema:
     """Build the multi-select device form."""
 
+    categories = _device_categories(devices)
     options = [
-        selector.SelectOptionDict(value=device.uid, label=_device_label(device))
-        for device in devices
+        selector.SelectOptionDict(
+            value=device.uid,
+            label=_device_label(device, categories[device.uid]),
+        )
+        for device in sorted(
+            devices,
+            key=lambda item: (
+                categories[item.uid] == _OTHER_DEVICE_CATEGORY,
+                categories[item.uid].casefold(),
+                (item.room or "").casefold(),
+                (item.name or item.model or "").casefold(),
+                item.uid,
+            ),
+        )
     ]
     return vol.Schema(
         {
@@ -270,6 +315,7 @@ class OrviboCloudConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if device.uid in self._pending_selected_ids
         }
         devices = [selected[device_id] for device_id in self._pending_selected_ids]
+        categories = _device_categories(self._pending_devices)
         if not devices or self._area_index >= len(devices):
             return self.async_abort(reason="unknown")
 
@@ -297,7 +343,7 @@ class OrviboCloudConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             step_id="area",
             data_schema=_area_schema(default_area_id),
             description_placeholders={
-                "device": _device_label(device),
+                "device": _device_label(device, categories[device.uid]),
                 "room": device.room or "-",
                 "position": str(self._area_index + 1),
                 "total": str(len(devices)),
@@ -462,6 +508,7 @@ class OrviboCloudOptionsFlow(config_entries.OptionsFlow):
             if device.uid in self._selected_ids
         }
         devices = [selected[device_id] for device_id in self._selected_ids]
+        categories = _device_categories(self._devices)
         if not devices or self._area_index >= len(devices):
             return self.async_abort(reason="unknown")
 
@@ -493,7 +540,7 @@ class OrviboCloudOptionsFlow(config_entries.OptionsFlow):
             step_id="area",
             data_schema=_area_schema(default_area_id),
             description_placeholders={
-                "device": _device_label(device),
+                "device": _device_label(device, categories[device.uid]),
                 "room": device.room or "-",
                 "position": str(self._area_index + 1),
                 "total": str(len(devices)),
