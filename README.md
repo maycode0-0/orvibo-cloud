@@ -59,6 +59,8 @@ ORVIBO Cloud 可将 **HomeMate** 或 **智家365** 账号中的设备接入 Home
 3. 重启 Home Assistant
 4. 进入 **设置 > 设备与服务 > 添加集成**，搜索 **ORVIBO Cloud**
 
+通过 HACS 安装后，新版本发布时会在 Home Assistant 中显示更新提醒。每次发布都必须提升 `custom_components/orvibo_cloud/manifest.json` 中的版本号；合入 `main` 后，仓库会自动创建对应的 GitHub Tag 和 Release。
+
 #### 方式二：手动安装
 
 将本仓库中的 `custom_components/orvibo_cloud/` 复制到 Home Assistant 配置目录：
@@ -202,6 +204,8 @@ ORVIBO Cloud connects devices from a **HomeMate** or **ZhiJia365** account to Ho
 2. Search for and install **ORVIBO Cloud**.
 3. Restart Home Assistant.
 4. Open **Settings > Devices & services > Add integration** and search for **ORVIBO Cloud**.
+
+After installation through HACS, Home Assistant will show an update when a new version is released. Every release must increment the version in `custom_components/orvibo_cloud/manifest.json`; merging it into `main` automatically creates the matching GitHub tag and release.
 
 #### Option 2: Manual installation
 
