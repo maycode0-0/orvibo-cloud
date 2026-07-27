@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import hashlib
 import hmac
 from typing import Any, Final, Mapping
@@ -35,6 +35,7 @@ class OrviboDevice:
     value2: int | None = None
     value3: int | None = None
     value4: int | None = None
+    properties: Mapping[str, Any] = field(default_factory=dict)
 
 
 def password_hash(password: str) -> str:
@@ -153,6 +154,42 @@ def _parse_online(value: Any) -> bool | None:
     return None
 
 
+def property_switch_state(
+    properties: Mapping[str, Any],
+    key: str,
+) -> bool | None:
+    """Normalize an on/off property reported by newer ORVIBO devices."""
+
+    value = properties.get(key)
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int) and value in (0, 1):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "on", "open"}:
+            return True
+        if normalized in {"0", "false", "off", "closed"}:
+            return False
+    return None
+
+
+def property_percentage(
+    properties: Mapping[str, Any],
+    key: str,
+) -> int | None:
+    """Normalize a percentage property and reject out-of-range values."""
+
+    value = properties.get(key)
+    if isinstance(value, bool):
+        return None
+    try:
+        percentage = int(value)
+    except (TypeError, ValueError):
+        return None
+    return percentage if 0 <= percentage <= 100 else None
+
+
 def parse_readtable_devices(payload: Mapping[str, Any]) -> tuple[OrviboDevice, ...]:
     """Normalize the device table and join its room and online-state tables."""
 
@@ -174,12 +211,15 @@ def parse_readtable_devices(payload: Mapping[str, Any]) -> tuple[OrviboDevice, .
     raw_statuses = data.get("deviceStatus", [])
     online_by_device: dict[str, bool | None] = {}
     values_by_device: dict[str, tuple[int | None, ...]] = {}
+    properties_by_device: dict[str, Mapping[str, Any]] = {}
+    statuses_by_device: dict[str, Mapping[str, Any]] = {}
     if isinstance(raw_statuses, list):
         for item in raw_statuses:
             if not isinstance(item, Mapping) or item.get("delFlag") in (1, "1"):
                 continue
             device_id = _first_text(item, ("deviceId", "deviceID"))
             if device_id:
+                statuses_by_device[device_id] = item
                 online_by_device[device_id] = _parse_online(item.get("online"))
                 values: list[int | None] = []
                 for key in ("value1", "value2", "value3", "value4"):
@@ -188,6 +228,10 @@ def parse_readtable_devices(payload: Mapping[str, Any]) -> tuple[OrviboDevice, .
                     except (KeyError, TypeError, ValueError):
                         values.append(None)
                 values_by_device[device_id] = tuple(values)
+                properties = item.get("properties")
+                properties_by_device[device_id] = (
+                    dict(properties) if isinstance(properties, Mapping) else {}
+                )
 
     raw_devices = data.get("device", [])
     if not isinstance(raw_devices, list):
@@ -246,6 +290,52 @@ def parse_readtable_devices(payload: Mapping[str, Any]) -> tuple[OrviboDevice, .
             value2=values[1],
             value3=values[2],
             value4=values[3],
+            properties=properties_by_device.get(device_id, {}),
+        )
+
+    # Some property-based devices, including door locks, only appear in the
+    # deviceStatus table. Keep those rows when they carry usable state.
+    for device_id, item in statuses_by_device.items():
+        properties = properties_by_device[device_id]
+        if device_id in devices or not properties:
+            continue
+        values = values_by_device[device_id]
+        devices[device_id] = OrviboDevice(
+            uid=device_id,
+            name=_first_text(
+                item,
+                ("deviceName", "devName", "name", "nickName", "nickname"),
+            ),
+            model=_first_text(
+                item,
+                (
+                    "model",
+                    "modelName",
+                    "modelId",
+                    "modelID",
+                    "productName",
+                    "productId",
+                    "productID",
+                    "pdid",
+                ),
+            ),
+            device_type=_first_text(
+                item,
+                ("deviceType", "devType", "type", "category", "deviceCategory"),
+            ),
+            room=_first_text(item, ("roomName", "room")),
+            parent_uid=_first_text(
+                item,
+                ("parentUid", "parentId", "parentID", "gatewayUid", "hubUid"),
+            ),
+            online=online_by_device[device_id],
+            cloud_uid=_first_text(item, ("uid",)),
+            sub_device_type=_first_text(item, ("subDeviceType", "subDevType")),
+            value1=values[0],
+            value2=values[1],
+            value3=values[2],
+            value4=values[3],
+            properties=properties,
         )
 
     return tuple(sorted(devices.values(), key=lambda device: device.uid))
@@ -361,6 +451,11 @@ def extract_devices(payloads: Any) -> tuple[OrviboDevice, ...]:
                         None,
                     )
                 ),
+                properties=(
+                    dict(value["properties"])
+                    if isinstance(value.get("properties"), Mapping)
+                    else {}
+                ),
             )
             previous = devices.get(uid)
             if previous is None:
@@ -378,6 +473,7 @@ def extract_devices(payloads: Any) -> tuple[OrviboDevice, ...]:
                         if candidate.online is not None
                         else previous.online
                     ),
+                    properties=candidate.properties or previous.properties,
                 )
 
         for child in value.values():

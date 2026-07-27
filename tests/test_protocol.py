@@ -121,6 +121,7 @@ class ProtocolTests(unittest.TestCase):
                             "value2": 146,
                             "value3": 250,
                             "value4": 0,
+                            "properties": {"battery_power": 64},
                             "delFlag": 0,
                         }
                     ],
@@ -139,6 +140,59 @@ class ProtocolTests(unittest.TestCase):
         self.assertEqual(devices[0].value3, 250)
         self.assertEqual(devices[0].value4, 0)
         self.assertEqual(devices[0].sub_device_type, "6")
+        self.assertEqual(devices[0].properties, {"battery_power": 64})
+
+    def test_parse_readtable_devices_keeps_property_only_door_lock(self) -> None:
+        devices = protocol.parse_readtable_devices(
+            {
+                "code": 0,
+                "data": {
+                    "device": [],
+                    "deviceStatus": [
+                        {
+                            "deviceId": "w-lock-device-0001",
+                            "uid": "lock-device-0001",
+                            "online": 0,
+                            "value1": -1,
+                            "value2": -1,
+                            "value3": -1,
+                            "value4": -1,
+                            "pdid": "ORBSTDA-030830-UVEUH,IISNJM",
+                            "properties": {
+                                "battery_power": 80,
+                                "door_status": "off",
+                            },
+                            "delFlag": 0,
+                        }
+                    ],
+                },
+            }
+        )
+
+        self.assertEqual(len(devices), 1)
+        self.assertEqual(devices[0].uid, "w-lock-device-0001")
+        self.assertEqual(devices[0].cloud_uid, "lock-device-0001")
+        self.assertEqual(devices[0].model, "ORBSTDA-030830-UVEUH,IISNJM")
+        self.assertFalse(devices[0].online)
+        self.assertEqual(devices[0].properties["battery_power"], 80)
+        self.assertFalse(
+            protocol.property_switch_state(devices[0].properties, "door_status")
+        )
+        self.assertEqual(
+            protocol.property_percentage(devices[0].properties, "battery_power"),
+            80,
+        )
+
+    def test_property_helpers_reject_unknown_or_invalid_values(self) -> None:
+        self.assertTrue(protocol.property_switch_state({"state": "on"}, "state"))
+        self.assertFalse(
+            protocol.property_switch_state({"state": "closed"}, "state")
+        )
+        self.assertIsNone(
+            protocol.property_switch_state({"state": "unknown"}, "state")
+        )
+        self.assertIsNone(protocol.property_percentage({"battery": 101}, "battery"))
+        self.assertIsNone(protocol.property_percentage({"battery": True}, "battery"))
 
     def test_extract_devices_handles_nested_and_duplicate_devices(self) -> None:
         devices = protocol.extract_devices(

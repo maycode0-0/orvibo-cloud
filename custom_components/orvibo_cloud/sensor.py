@@ -4,15 +4,22 @@ from __future__ import annotations
 
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorStateClass,
+)
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import PERCENTAGE
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import CONF_FAMILY_ID, CONF_USER_ID, DOMAIN
 from .coordinator import OrviboCloudCoordinator
-from .entity import OrviboCloudEntity
+from .entity import OrviboCloudDeviceEntity, OrviboCloudEntity
+from .protocol import property_percentage
+from .selection import device_is_selected
 
 
 async def async_setup_entry(
@@ -21,12 +28,17 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     coordinator: OrviboCloudCoordinator = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities(
-        [
-            OrviboCloudFamilySensor(coordinator),
-            OrviboCloudDeviceCountSensor(coordinator),
-        ]
+    entities: list[SensorEntity] = [
+        OrviboCloudFamilySensor(coordinator),
+        OrviboCloudDeviceCountSensor(coordinator),
+    ]
+    entities.extend(
+        OrviboBatterySensor(coordinator, device.uid)
+        for device in coordinator.data.devices
+        if device_is_selected(entry.options, device.uid)
+        and "battery_power" in device.properties
     )
+    async_add_entities(entities)
 
 
 class OrviboCloudFamilySensor(OrviboCloudEntity, SensorEntity):
@@ -89,3 +101,27 @@ class OrviboCloudDeviceCountSensor(OrviboCloudEntity, SensorEntity):
                 }
             ),
         }
+
+
+class OrviboBatterySensor(OrviboCloudDeviceEntity, SensorEntity):
+    """Report the battery percentage of a property-based device."""
+
+    _attr_device_class = SensorDeviceClass.BATTERY
+    _attr_native_unit_of_measurement = PERCENTAGE
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_name = "Battery"
+
+    def __init__(
+        self,
+        coordinator: OrviboCloudCoordinator,
+        device_id: str,
+    ) -> None:
+        super().__init__(coordinator, device_id)
+        self._attr_unique_id = f"{device_id}_battery"
+
+    @property
+    def native_value(self) -> int | None:
+        device = self._device
+        if device is None:
+            return None
+        return property_percentage(device.properties, "battery_power")
