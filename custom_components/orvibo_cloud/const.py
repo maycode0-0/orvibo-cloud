@@ -12,7 +12,7 @@ CONF_HOST: Final = "host"
 CONF_PASSWORD_HASH: Final = "password_hash"
 CONF_USER_ID: Final = "user_id"
 
-DEFAULT_SCAN_INTERVAL: Final = timedelta(minutes=30)
+DEFAULT_SCAN_INTERVAL: Final = timedelta(minutes=1)
 
 ORVIBO_HOSTS: Final = (
     "china.orvibo.com",

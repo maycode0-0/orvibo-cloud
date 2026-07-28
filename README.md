@@ -25,7 +25,7 @@ ORVIBO Cloud 可将 **HomeMate** 或 **智家365** 账号中的设备接入 Home
 - 自动使用欧瑞博 App 中的房间作为默认区域，也可在配置时或集成选项中修改
 - 支持已验证的窗帘电机和灯光设备控制
 - 提供云端连接状态、当前家庭和设备数量等诊断实体
-- 每 30 分钟刷新一次云端设备状态，控制命令执行后会立即更新实体状态
+- 每 1 分钟刷新一次云端设备状态，控制命令执行后会立即更新实体状态
 - 不保存明文密码；二进制会话密码仅保存在内存中
 
 ### 工作原理
@@ -109,7 +109,11 @@ config/
 ### 技术细节
 
 - **集成类型**：Cloud Polling
-- **状态刷新间隔**：30 分钟
+- **状态刷新间隔**：1 分钟
+
+> [!IMPORTANT]
+> 门锁等传感器状态来自每分钟一次的云端快照，不是实时事件推送。不到一分钟完成的短暂开关可能不会被 Home Assistant 捕获，请勿将其作为实时安防告警来源。
+
 - **登录接口**：`GET https://<region>.orvibo.com/getOauthToken`
 - **家庭接口**：`POST https://<region>.orvibo.com/v2/family/statistics/users`
 - **设备发现**：`POST https://<region>.orvibo.com/v2/cmd/app/readtable`
@@ -171,7 +175,7 @@ ORVIBO Cloud connects devices from a **HomeMate** or **ZhiJia365** account to Ho
 - Uses ORVIBO rooms as default Home Assistant areas, with area selection during setup or later in the integration options
 - Controls verified curtain motors and light profiles
 - Exposes cloud connectivity, selected family, and device count as diagnostic entities
-- Refreshes cloud device state every 30 minutes and updates entity state immediately after control commands
+- Refreshes cloud device state every minute and updates entity state immediately after control commands
 - Never stores the plaintext password; the binary session password remains in memory only
 
 ### How it works
@@ -255,7 +259,11 @@ Controllable entities are created only for packet-capture-verified profiles. Oth
 ### Technical details
 
 - **Integration type**: Cloud Polling
-- **State refresh interval**: 30 minutes
+- **State refresh interval**: 1 minute
+
+> [!IMPORTANT]
+> Door-lock and other sensor states come from a cloud snapshot fetched once per minute, not from real-time event push. A brief open-and-close cycle completed within one minute may not be observed by Home Assistant. Do not use this integration as a real-time security alarm source.
+
 - **Login endpoint**: `GET https://<region>.orvibo.com/getOauthToken`
 - **Family endpoint**: `POST https://<region>.orvibo.com/v2/family/statistics/users`
 - **Device discovery**: `POST https://<region>.orvibo.com/v2/cmd/app/readtable`
