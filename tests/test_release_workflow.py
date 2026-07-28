@@ -5,6 +5,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 import unittest
+from typing import Any
+
+import yaml
 
 
 ROOT = Path(__file__).parents[1]
@@ -12,6 +15,15 @@ MANIFEST_PATH = ROOT / "custom_components" / "orvibo_cloud" / "manifest.json"
 HACS_PATH = ROOT / "hacs.json"
 RELEASE_PATH = ROOT / ".github" / "workflows" / "hacs-release.yml"
 VALIDATE_PATH = ROOT / ".github" / "workflows" / "validate.yml"
+
+
+def _load_workflow(path: Path) -> dict[str, Any]:
+    """Parse a GitHub Actions workflow as YAML."""
+
+    workflow = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(workflow, dict):
+        raise AssertionError(f"Workflow {path.name} must contain a YAML mapping")
+    return workflow
 
 
 class ReleaseWorkflowTests(unittest.TestCase):
@@ -28,7 +40,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertEqual(hacs["filename"], "orvibo_cloud.zip")
 
     def test_validation_runs_for_push_and_pull_requests(self) -> None:
-        workflow = json.loads(VALIDATE_PATH.read_text(encoding="utf-8"))
+        workflow = _load_workflow(VALIDATE_PATH)
 
         self.assertEqual(set(workflow["on"]), {"push", "pull_request"})
         self.assertEqual(
@@ -36,13 +48,16 @@ class ReleaseWorkflowTests(unittest.TestCase):
             {"unit-tests", "hacs", "hassfest"},
         )
         workflow_text = VALIDATE_PATH.read_text(encoding="utf-8")
+        self.assertIn('"PyYAML>=6.0.2"', workflow_text)
         self.assertIn("python -m unittest discover -s tests -v", workflow_text)
         self.assertIn("hacs/action@main", workflow_text)
         self.assertIn("home-assistant/actions/hassfest@master", workflow_text)
 
     def test_release_has_scheduled_beta_and_manual_stable_channels(self) -> None:
-        workflow = json.loads(RELEASE_PATH.read_text(encoding="utf-8"))
+        workflow = _load_workflow(RELEASE_PATH)
+        workflow_text = RELEASE_PATH.read_text(encoding="utf-8")
 
+        self.assertIn('"PyYAML>=6.0.2"', workflow_text)
         self.assertEqual(
             workflow["on"]["schedule"][0]["cron"].split(),
             ["17", "3", "*", "*", "2,5"],

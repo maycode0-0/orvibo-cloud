@@ -133,6 +133,7 @@ config/
 运行不依赖 Home Assistant 安装环境的协议测试：
 
 ```powershell
+python -m pip install "aiohttp>=3.9.0" "pycryptodome>=3.20.0" "PyYAML>=6.0.2"
 python -m unittest discover -s tests -v
 ```
 
@@ -283,6 +284,7 @@ Controllable entities are created only for packet-capture-verified profiles. Oth
 Run the protocol tests, which do not require a Home Assistant installation:
 
 ```powershell
+python -m pip install "aiohttp>=3.9.0" "pycryptodome>=3.20.0" "PyYAML>=6.0.2"
 python -m unittest discover -s tests -v
 ```
 
