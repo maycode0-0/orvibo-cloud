@@ -59,7 +59,7 @@ ORVIBO Cloud 可将 **HomeMate** 或 **智家365** 账号中的设备接入 Home
 3. 重启 Home Assistant
 4. 进入 **设置 > 设备与服务 > 添加集成**，搜索 **ORVIBO Cloud**
 
-通过 HACS 安装后，新版本发布时会在 Home Assistant 中显示更新提醒。每次发布都必须提升 `custom_components/orvibo_cloud/manifest.json` 中的版本号；合入 `main` 后，仓库会自动创建对应的 GitHub Tag 和 Release。
+通过 HACS安装后，新版本发布时会在 Home Assistant 中显示更新提醒。`main`有新提交时，GitHub Actions会在每周二、周五自动发布 `0.x.ybN` 测试版；正式版只通过手动工作流发布。开始下一轮开发前，维护者需要先提升 `custom_components/orvibo_cloud/manifest.json` 中的目标正式版本。每个 Release 都附带 HACS直接安装的 `orvibo_cloud.zip`。
 
 #### 方式二：手动安装
 
@@ -205,7 +205,7 @@ ORVIBO Cloud connects devices from a **HomeMate** or **ZhiJia365** account to Ho
 3. Restart Home Assistant.
 4. Open **Settings > Devices & services > Add integration** and search for **ORVIBO Cloud**.
 
-After installation through HACS, Home Assistant will show an update when a new version is released. Every release must increment the version in `custom_components/orvibo_cloud/manifest.json`; merging it into `main` automatically creates the matching GitHub tag and release.
+After installation through HACS, Home Assistant will show an update when a new version is released. When `main` contains new commits, GitHub Actions publishes a `0.x.ybN` beta every Tuesday and Friday; stable releases are manual only. Maintainers must bump the target stable version in `custom_components/orvibo_cloud/manifest.json` before starting the next release cycle. Every release includes an `orvibo_cloud.zip` asset that HACS can install directly.
 
 #### Option 2: Manual installation
 

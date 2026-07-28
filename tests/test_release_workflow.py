@@ -6,33 +6,78 @@ import json
 from pathlib import Path
 import unittest
 
+
 ROOT = Path(__file__).parents[1]
 MANIFEST_PATH = ROOT / "custom_components" / "orvibo_cloud" / "manifest.json"
-WORKFLOW_PATH = ROOT / ".github" / "workflows" / "hacs-release.yml"
+HACS_PATH = ROOT / "hacs.json"
+RELEASE_PATH = ROOT / ".github" / "workflows" / "hacs-release.yml"
+VALIDATE_PATH = ROOT / ".github" / "workflows" / "validate.yml"
 
 
 class ReleaseWorkflowTests(unittest.TestCase):
-    def test_manifest_uses_stable_semantic_version(self) -> None:
+    def test_manifest_uses_next_stable_semantic_version(self) -> None:
         manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
 
-        self.assertRegex(manifest["version"], r"^\d+\.\d+\.\d+$")
+        self.assertEqual(manifest["version"], "0.7.1")
+        self.assertRegex(manifest["version"], r"^0\.\d+\.\d+$")
 
-    def test_manifest_changes_on_main_publish_hacs_release(self) -> None:
-        workflow = WORKFLOW_PATH.read_text(encoding="utf-8")
+    def test_hacs_uses_release_zip(self) -> None:
+        hacs = json.loads(HACS_PATH.read_text(encoding="utf-8"))
 
-        self.assertRegex(workflow, r"branches:\s*\n\s*- main")
-        self.assertIn(
-            "- custom_components/orvibo_cloud/manifest.json",
-            workflow,
+        self.assertTrue(hacs["zip_release"])
+        self.assertEqual(hacs["filename"], "orvibo_cloud.zip")
+
+    def test_validation_runs_for_push_and_pull_requests(self) -> None:
+        workflow = json.loads(VALIDATE_PATH.read_text(encoding="utf-8"))
+
+        self.assertEqual(set(workflow["on"]), {"push", "pull_request"})
+        self.assertEqual(
+            set(workflow["jobs"]),
+            {"unit-tests", "hacs", "hassfest"},
         )
-        self.assertRegex(workflow, r"permissions:\s*\n\s*contents: write")
+        workflow_text = VALIDATE_PATH.read_text(encoding="utf-8")
+        self.assertIn("python -m unittest discover -s tests -v", workflow_text)
+        self.assertIn("hacs/action@main", workflow_text)
+        self.assertIn("home-assistant/actions/hassfest@master", workflow_text)
+
+    def test_release_has_scheduled_beta_and_manual_stable_channels(self) -> None:
+        workflow = json.loads(RELEASE_PATH.read_text(encoding="utf-8"))
+
+        self.assertEqual(
+            workflow["on"]["schedule"][0]["cron"].split(),
+            ["17", "3", "*", "*", "2,5"],
+        )
+        self.assertIn("workflow_dispatch", workflow["on"])
+        self.assertEqual(
+            set(workflow["jobs"]["release"]["needs"]),
+            {"unit-tests", "hacs", "hassfest"},
+        )
+        self.assertEqual(
+            workflow["jobs"]["release"]["if"],
+            "github.ref == 'refs/heads/main'",
+        )
+
+    def test_release_builds_rooted_zip_and_is_idempotent(self) -> None:
+        workflow = RELEASE_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("${stable}b${context.runNumber}", workflow)
+        self.assertIn("cd release-package/orvibo_cloud", workflow)
+        self.assertIn("zip -r ../../orvibo_cloud.zip .", workflow)
+        self.assertIn("orvibo_cloud.zip", workflow)
         self.assertIn("getReleaseByTag", workflow)
-        self.assertIn("createRelease", workflow)
-        self.assertLess(
-            workflow.index("getReleaseByTag"),
-            workflow.index("createRelease"),
-        )
-        self.assertIn("generate_release_notes: true", workflow)
+        self.assertIn("uploadReleaseAsset", workflow)
+        self.assertIn("assets.some", workflow)
+        self.assertIn("Create or repair GitHub release", workflow)
+        self.assertIn("content-type", workflow)
+        self.assertIn("content-length", workflow)
+        self.assertIn("asset.state", workflow)
+        self.assertIn("asset.size", workflow)
+        self.assertIn("deleteReleaseAsset", workflow)
+        self.assertIn("getRef", workflow)
+        self.assertIn("does not point to", workflow)
+        self.assertNotIn("::set-output", workflow)
+        self.assertNotIn("upload-release-asset@v1", workflow)
+        self.assertNotIn("create-release@v1", workflow)
 
 
 if __name__ == "__main__":
