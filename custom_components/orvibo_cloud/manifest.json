@@ -1,11 +1,11 @@
 {
   "domain": "orvibo_cloud",
   "name": "ORVIBO Cloud",
- "codeowners": ["@maycode0-0"],
-	"config_flow": true,
-	"documentation": "https://github.com/maycode0-0/orvibo-cloud#readme",
-	"iot_class": "cloud_polling",
-	"issue_tracker": "https://github.com/maycode0-0/orvibo-cloud/issues",
+  "codeowners": ["@maycode0-0"],
+  "config_flow": true,
+  "documentation": "https://github.com/maycode0-0/orvibo-cloud#readme",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/maycode0-0/orvibo-cloud/issues",
   "requirements": ["pycryptodome>=3.20.0"],
- "version": "0.7.1"
+  "version": "0.7.1"
 }
