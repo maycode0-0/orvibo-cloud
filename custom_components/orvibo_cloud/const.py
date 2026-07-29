@@ -11,6 +11,7 @@ CONF_FAMILY_ID: Final = "family_id"
 CONF_HOST: Final = "host"
 CONF_PASSWORD_HASH: Final = "password_hash"
 CONF_USER_ID: Final = "user_id"
+CONF_RAW_EVENT_CAPTURE: Final = "raw_event_capture"
 
 DEFAULT_SCAN_INTERVAL: Final = timedelta(minutes=1)
 

@@ -3,13 +3,22 @@
 from __future__ import annotations
 
 from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import CONF_EMAIL
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 
 from .api import OrviboCloudClient
-from .const import CONF_HOST, DOMAIN, PLATFORMS
+from .capture import OrviboRawEventCapture
+from .const import (
+    CONF_FAMILY_ID,
+    CONF_HOST,
+    CONF_PASSWORD_HASH,
+    CONF_RAW_EVENT_CAPTURE,
+    DOMAIN,
+    PLATFORMS,
+)
 from .coordinator import OrviboCloudCoordinator
 from .selection import (
     configured_device_areas,
@@ -37,12 +46,24 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    if entry.options.get(CONF_RAW_EVENT_CAPTURE, False):
+        coordinator.raw_event_capture = OrviboRawEventCapture(
+            hass,
+            entry.data[CONF_HOST],
+            entry.data[CONF_EMAIL],
+            entry.data[CONF_PASSWORD_HASH],
+            entry.data[CONF_FAMILY_ID],
+        )
+        coordinator.raw_event_capture.start()
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload an Orvibo Cloud config entry."""
 
+    coordinator = hass.data[DOMAIN][entry.entry_id]
+    if coordinator.raw_event_capture is not None:
+        await coordinator.raw_event_capture.async_stop()
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unload_ok:
         hass.data[DOMAIN].pop(entry.entry_id)

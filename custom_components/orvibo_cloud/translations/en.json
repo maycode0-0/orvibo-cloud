@@ -41,9 +41,16 @@
       "unknown": "The configuration flow lost its account state."
     }
   },
-  "options": {
-    "step": {
-      "devices": {
+ "options": {
+ "step": {
+ "init": {
+ "title": "Diagnostic capture",
+ "description": "Capture unsolicited cloud packets in the Home Assistant log. Credentials and identifiers are redacted. Enable this only while diagnosing a device, then disable it.",
+ "data": {
+ "raw_event_capture": "Enable redacted raw event capture"
+ }
+ },
+ "devices": {
         "title": "Select devices",
         "description": "Only checked devices will be added to Home Assistant.",
         "data": {"selected_device_ids": "Devices"}

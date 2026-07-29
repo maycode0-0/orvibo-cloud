@@ -41,9 +41,16 @@
       "unknown": "配置流程中的账号状态已丢失。"
     }
   },
-  "options": {
-    "step": {
-      "devices": {
+ "options": {
+ "step": {
+ "init": {
+ "title": "诊断捕获",
+ "description": "将云端主动推送的数据包记录到 Home Assistant 日志。凭据和设备标识会被脱敏。请仅在诊断设备时开启，完成后关闭。",
+ "data": {
+ "raw_event_capture": "启用脱敏的原始事件捕获"
+ }
+ },
+ "devices": {
         "title": "选择设备",
         "description": "只有勾选的设备才会添加到 Home Assistant。",
         "data": {"selected_device_ids": "设备"}

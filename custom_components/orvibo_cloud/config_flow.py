@@ -26,6 +26,7 @@ from .const import (
     CONF_FAMILY_ID,
     CONF_HOST,
     CONF_PASSWORD_HASH,
+    CONF_RAW_EVENT_CAPTURE,
     CONF_USER_ID,
     DOMAIN,
 )
@@ -430,15 +431,32 @@ class OrviboCloudOptionsFlow(config_entries.OptionsFlow):
         self._selected_ids: list[str] = []
         self._device_areas: dict[str, str | None] = {}
         self._area_index = 0
+        self._raw_event_capture = False
 
     async def async_step_init(
         self,
         user_input: dict[str, Any] | None = None,
     ) -> FlowResult:
-        """Open the device selection form."""
+        """Configure diagnostic capture before device selection."""
 
         self._device_areas = configured_device_areas(self.config_entry.options)
-        return await self.async_step_devices(user_input)
+        if user_input is not None:
+            self._raw_event_capture = bool(user_input[CONF_RAW_EVENT_CAPTURE])
+            return await self.async_step_devices()
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_RAW_EVENT_CAPTURE,
+                        default=self.config_entry.options.get(
+                            CONF_RAW_EVENT_CAPTURE,
+                            False,
+                        ),
+                    ): bool
+                }
+            ),
+        )
 
     async def async_step_devices(
         self,
@@ -522,6 +540,7 @@ class OrviboCloudOptionsFlow(config_entries.OptionsFlow):
                     title="",
                     data={
                         CONF_SELECTED_DEVICE_IDS: self._selected_ids,
+                        CONF_RAW_EVENT_CAPTURE: self._raw_event_capture,
                         CONF_DEVICE_AREAS: {
                             device_id: area_id
                             for device_id, area_id in self._device_areas.items()

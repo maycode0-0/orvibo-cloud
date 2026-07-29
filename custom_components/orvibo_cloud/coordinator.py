@@ -17,6 +17,7 @@ from .api import (
     OrviboInvalidAuthError,
     OrviboProtocolError,
 )
+from .capture import OrviboRawEventCapture
 from .const import (
     CONF_FAMILY_ID,
     CONF_HOST,
@@ -47,6 +48,7 @@ class OrviboCloudCoordinator(DataUpdateCoordinator[OrviboAccount]):
         self.client = client
         self.device_discovery_error: str | None = None
         self.privacy_device_discovery_error: str | None = None
+        self.raw_event_capture: OrviboRawEventCapture | None = None
 
     async def _async_update_data(self) -> OrviboAccount:
         try:

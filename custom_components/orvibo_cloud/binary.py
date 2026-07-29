@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 import json
 import logging
 from pathlib import Path
@@ -12,6 +12,7 @@ import socket
 import ssl
 import struct
 import time
+from threading import Event
 from typing import Any, Final
 import zlib
 
@@ -144,6 +145,32 @@ class OrviboBinaryClient:
             except (KeyError, TypeError, ValueError):
                 values.append(None)
         return values[0], values[1], values[2], values[3]
+
+    def capture_events(
+        self,
+        stop_event: Event,
+        callback: Callable[[Mapping[str, Any]], None],
+    ) -> None:
+        """Keep one authenticated session open and deliver unsolicited packets."""
+
+        try:
+            self._connect()
+            self._handshake()
+            self._login()
+            while not stop_event.is_set():
+                if self._socket is None:
+                    raise OrviboBinaryError("ORVIBO capture socket is not connected")
+                readable, _, _ = select.select([self._socket], [], [], 1.0)
+                if not readable:
+                    continue
+                data = self._socket.recv(65536)
+                if not data:
+                    raise OrviboBinaryError("ORVIBO capture connection was closed")
+                self._receive_buffer.extend(data)
+                for packet in self._extract_frames():
+                    callback(packet)
+        finally:
+            self.close()
 
     def close(self) -> None:
         if self._socket is not None:
