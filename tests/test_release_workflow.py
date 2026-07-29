@@ -53,11 +53,12 @@ class ReleaseWorkflowTests(unittest.TestCase):
         self.assertIn("hacs/action@main", workflow_text)
         self.assertIn("home-assistant/actions/hassfest@master", workflow_text)
 
-    def test_release_has_scheduled_beta_and_manual_stable_channels(self) -> None:
+    def test_release_has_beta_manual_and_tag_stable_channels(self) -> None:
         workflow = _load_workflow(RELEASE_PATH)
         workflow_text = RELEASE_PATH.read_text(encoding="utf-8")
 
         self.assertIn('"PyYAML>=6.0.2"', workflow_text)
+        self.assertEqual(workflow["on"]["push"]["tags"], ["v*.*.*"])
         self.assertEqual(
             workflow["on"]["schedule"][0]["cron"].split(),
             ["17", "3", "*", "*", "2,5"],
@@ -67,15 +68,21 @@ class ReleaseWorkflowTests(unittest.TestCase):
             set(workflow["jobs"]["release"]["needs"]),
             {"unit-tests", "hacs", "hassfest"},
         )
-        self.assertEqual(
-            workflow["jobs"]["release"]["if"],
-            "github.ref == 'refs/heads/main'",
-        )
+        release_condition = workflow["jobs"]["release"]["if"]
+        self.assertIn("github.event_name == 'schedule'", release_condition)
+        self.assertIn("github.event_name == 'workflow_dispatch'", release_condition)
+        self.assertIn("github.ref == 'refs/heads/main'", release_condition)
+        self.assertIn("github.event_name == 'push'", release_condition)
+        self.assertIn("startsWith(github.ref, 'refs/tags/v')", release_condition)
 
     def test_release_builds_rooted_zip_and_is_idempotent(self) -> None:
         workflow = RELEASE_PATH.read_text(encoding="utf-8")
 
         self.assertIn("${stable}b${context.runNumber}", workflow)
+        self.assertIn("const tagPush = context.eventName === 'push'", workflow)
+        self.assertIn("context.ref !== `refs/tags/${stableTag}`", workflow)
+        self.assertIn("does not match manifest version", workflow)
+        self.assertIn("prerelease ? `v${version}` : stableTag", workflow)
         self.assertIn("cd release-package/orvibo_cloud", workflow)
         self.assertIn("zip -r ../../orvibo_cloud.zip .", workflow)
         self.assertIn("orvibo_cloud.zip", workflow)
