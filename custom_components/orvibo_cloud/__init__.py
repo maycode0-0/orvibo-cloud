@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_EMAIL
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers import device_registry as dr
@@ -26,6 +27,8 @@ from .selection import (
     selected_device_ids,
 )
 
+_LOGGER = logging.getLogger(__name__)
+
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up Orvibo Cloud from a config entry."""
@@ -47,11 +50,19 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     if entry.options.get(CONF_RAW_EVENT_CAPTURE, False):
+        binary_user_name = coordinator.data.binary_user_name
+        binary_password = coordinator.data.binary_password
+        if not binary_user_name or not binary_password:
+            _LOGGER.warning(
+                "ORVIBO raw event capture was not started because port-10002 "
+                "credentials were not returned by device discovery"
+            )
+            return True
         coordinator.raw_event_capture = OrviboRawEventCapture(
             hass,
             entry.data[CONF_HOST],
-            entry.data[CONF_EMAIL],
-            entry.data[CONF_PASSWORD_HASH],
+            binary_user_name,
+            binary_password,
             entry.data[CONF_FAMILY_ID],
         )
         coordinator.raw_event_capture.start()

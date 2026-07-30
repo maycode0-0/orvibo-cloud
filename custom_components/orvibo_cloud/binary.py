@@ -37,6 +37,42 @@ class OrviboBinaryError(Exception):
     """Raised when an ORVIBO binary operation fails."""
 
 
+class OrviboCaptureError(OrviboBinaryError):
+    """Describe a capture failure without exposing connection credentials."""
+
+    def __init__(self, stage: str, cause: BaseException) -> None:
+        self.stage = stage
+        self.error_type = type(cause).__name__
+        if isinstance(cause, OSError):
+            self.detail = f"{self.error_type} (errno={cause.errno!r})"
+        elif isinstance(cause, OrviboBinaryError):
+            self.detail = _safe_binary_error_detail(cause)
+        else:
+            self.detail = self.error_type
+        super().__init__(f"stage={stage}, detail={self.detail}")
+
+
+def _safe_binary_error_detail(error: OrviboBinaryError) -> str:
+    """Return bounded diagnostics from locally generated protocol errors."""
+
+    message = str(error)
+    if message.startswith("ORVIBO binary handshake did not return a key"):
+        return "handshake response did not contain a key"
+    if message == "ORVIBO binary handshake returned an invalid key":
+        return "handshake response contained an invalid key"
+    if message.startswith("ORVIBO binary login did not return a response"):
+        return "login response was not received"
+    if message.startswith("ORVIBO binary login was rejected"):
+        return "login was rejected"
+    if message == "ORVIBO capture socket is not connected":
+        return "capture socket is not connected"
+    if message == "ORVIBO capture connection was closed":
+        return "capture connection was closed"
+    if message == "ORVIBO client certificate files are missing":
+        return "client certificate files are missing"
+    return "binary protocol operation failed"
+
+
 class OrviboBinaryClient:
     """Blocking binary protocol client. Run it in HA's executor."""
 
@@ -153,10 +189,14 @@ class OrviboBinaryClient:
     ) -> None:
         """Keep one authenticated session open and deliver unsolicited packets."""
 
+        stage = "connect"
         try:
             self._connect()
+            stage = "handshake"
             self._handshake()
+            stage = "login"
             self._login()
+            stage = "stream"
             while not stop_event.is_set():
                 if self._socket is None:
                     raise OrviboBinaryError("ORVIBO capture socket is not connected")
@@ -169,6 +209,8 @@ class OrviboBinaryClient:
                 self._receive_buffer.extend(data)
                 for packet in self._extract_frames():
                     callback(packet)
+        except (OrviboBinaryError, OSError, ssl.SSLError) as err:
+            raise OrviboCaptureError(stage, err) from err
         finally:
             self.close()
 

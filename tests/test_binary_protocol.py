@@ -229,5 +229,57 @@ class BinaryProtocolTests(unittest.TestCase):
             client.control_device("device-1", "", "open", 0)
 
 
+    def test_capture_reports_login_failure_stage_and_safe_detail(self) -> None:
+        client = self.binary.OrviboBinaryClient(
+            host="china.orvibo.com",
+            email="binary-user",
+            password_md5="transient-password",
+            family_id="family-1",
+        )
+        client._connect = lambda: None
+        client._handshake = lambda: []
+        client._login = lambda: (_ for _ in ()).throw(
+            self.binary.OrviboBinaryError(
+                "ORVIBO binary login was rejected (status=5)"
+            )
+        )
+
+        with self.assertRaises(self.binary.OrviboCaptureError) as raised:
+            client.capture_events(self.binary.Event(), lambda packet: None)
+
+        self.assertEqual(raised.exception.stage, "login")
+        self.assertEqual(raised.exception.error_type, "OrviboBinaryError")
+        self.assertEqual(raised.exception.detail, "login was rejected")
+        self.assertNotIn("transient-password", str(raised.exception))
+
+    def test_capture_does_not_log_untrusted_binary_error_text(self) -> None:
+        secret = "account@example.com:transient-password"
+        error = self.binary.OrviboCaptureError(
+            "login",
+            self.binary.OrviboBinaryError(secret),
+        )
+
+        self.assertEqual(error.detail, "binary protocol operation failed")
+        self.assertNotIn(secret, str(error))
+
+    def test_capture_redacts_operating_system_error_detail(self) -> None:
+        client = self.binary.OrviboBinaryClient(
+            host="private.example.com",
+            email="binary-user",
+            password_md5="transient-password",
+            family_id="family-1",
+        )
+        client._connect = lambda: (_ for _ in ()).throw(
+            OSError(111, "connection to private.example.com failed")
+        )
+
+        with self.assertRaises(self.binary.OrviboCaptureError) as raised:
+            client.capture_events(self.binary.Event(), lambda packet: None)
+
+        self.assertEqual(raised.exception.stage, "connect")
+        self.assertEqual(raised.exception.detail, "ConnectionRefusedError (errno=111)")
+        self.assertNotIn("private.example.com", str(raised.exception))
+
+
 if __name__ == "__main__":
     unittest.main()

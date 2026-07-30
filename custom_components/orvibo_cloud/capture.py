@@ -8,13 +8,12 @@ import json
 import logging
 import re
 import secrets
-import ssl
 from threading import Event, Lock, Thread
 from typing import Any, Final
 
 from homeassistant.core import HomeAssistant
 
-from .binary import OrviboBinaryClient, OrviboBinaryError
+from .binary import OrviboBinaryClient, OrviboCaptureError
 
 _LOGGER = logging.getLogger(__name__)
 _RECONNECT_DELAY_SECONDS: Final =5
@@ -173,10 +172,22 @@ class OrviboRawEventCapture:
                 self._client = client
             try:
                 client.capture_events(self._stop_event, self._capture)
-            except (OrviboBinaryError, OSError, ssl.SSLError) as err:
+            except OrviboCaptureError as err:
                 if not self._stop_event.is_set():
                     _LOGGER.warning(
-                        "ORVIBO raw event capture disconnected (%s); "
+                        "ORVIBO raw event capture disconnected "
+                        "(stage=%s, error=%s, detail=%s); "
+                        "retrying in %s seconds",
+                        err.stage,
+                        err.error_type,
+                        err.detail,
+                        _RECONNECT_DELAY_SECONDS,
+                    )
+            except Exception as err: # noqa: BLE001 - keep the capture thread alive.
+                if not self._stop_event.is_set():
+                    _LOGGER.warning(
+                        "ORVIBO raw event capture disconnected "
+                        "(stage=internal, error=%s, detail=unexpected capture failure); "
                         "retrying in %s seconds",
                         type(err).__name__,
                         _RECONNECT_DELAY_SECONDS,

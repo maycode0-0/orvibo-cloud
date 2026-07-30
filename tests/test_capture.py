@@ -9,6 +9,7 @@ import types
 import unittest
 
 COMPONENT_PATH = Path(__file__).parents[1] / "custom_components" / "orvibo_cloud"
+SETUP_PATH = COMPONENT_PATH / "__init__.py"
 
 
 def _load_capture_module():
@@ -25,7 +26,7 @@ def _load_capture_module():
     sys.modules["homeassistant.core"] = core
     binary = types.ModuleType(f"{package_name}.binary")
     binary.OrviboBinaryClient = object
-    binary.OrviboBinaryError = RuntimeError
+    binary.OrviboCaptureError = RuntimeError
     sys.modules[f"{package_name}.binary"] = binary
     return importlib.import_module(f"{package_name}.capture")
 
@@ -91,6 +92,25 @@ class RawEventRedactionTests(unittest.TestCase):
         self.assertNotIn("AA:BB:CC:DD:EE:FF", redacted)
         self.assertNotIn("AABBCCDDEEFF", redacted)
         self.assertTrue(all(key.startswith("<id:") for key in redacted))
+
+
+class RawEventSetupStructureTests(unittest.TestCase):
+    def test_capture_uses_transient_port_10002_credentials(self) -> None:
+        source = SETUP_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("coordinator.data.binary_user_name", source)
+        self.assertIn("coordinator.data.binary_password", source)
+        capture_call = source.split("OrviboRawEventCapture(", maxsplit=1)[1].split(
+            ")", maxsplit=1
+        )[0]
+        self.assertNotIn("CONF_EMAIL", capture_call)
+        self.assertNotIn("CONF_PASSWORD_HASH", capture_call)
+
+    def test_capture_does_not_start_without_binary_credentials(self) -> None:
+        source = SETUP_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("if not binary_user_name or not binary_password:", source)
+        self.assertIn("credentials were not returned by device discovery", source)
 
 
 if __name__ == "__main__":
