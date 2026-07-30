@@ -30,7 +30,7 @@ class ReleaseWorkflowTests(unittest.TestCase):
     def test_manifest_uses_next_stable_semantic_version(self) -> None:
         manifest = json.loads(MANIFEST_PATH.read_text(encoding="utf-8"))
 
-        self.assertEqual(manifest["version"], "0.7.2")
+        self.assertEqual(manifest["version"], "0.7.3")
         self.assertRegex(manifest["version"], r"^0\.\d+\.\d+$")
 
     def test_hacs_uses_release_zip(self) -> None:
