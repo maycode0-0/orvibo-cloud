@@ -14,6 +14,7 @@ from typing import Any, Final
 from homeassistant.core import HomeAssistant
 
 from .binary import OrviboBinaryClient, OrviboCaptureError
+from .const import ORVIBO_LOCK_EVENT
 
 _LOGGER = logging.getLogger(__name__)
 _RECONNECT_DELAY_SECONDS: Final =5
@@ -49,6 +50,16 @@ _IDENTIFIER_KEYS: Final = frozenset(
         "userid",
         "username",
     }
+)
+_LOCK_COMMAND: Final =42
+_LOCK_STATE_KEYS: Final = (
+ "door_status",
+ "handle",
+ "reverse_lock",
+ "clild_lock",
+)
+_SAFE_LOCK_VALUES: Final = frozenset(
+ {"open", "closed", "up", "down", "on", "off", "locked", "unlocked"}
 )
 
 
@@ -117,6 +128,54 @@ def redact_packet(
     return f"<{type(value).__name__}>"
 
 
+def parse_lock_event(packet: Mapping[str, Any]) -> dict[str, Any] | None:
+    """Extract a safe, normalized lock event from an unsolicited cmd=42 packet."""
+
+    if packet.get("cmd") != _LOCK_COMMAND:
+        return None
+    uid = packet.get("uid")
+    properties = packet.get("properties")
+    if not isinstance(uid, str) or not uid or not isinstance(properties, Mapping):
+        return None
+
+    states: dict[str, str] = {}
+    for key in _LOCK_STATE_KEYS:
+        value = properties.get(key)
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in _SAFE_LOCK_VALUES:
+                states[key] = normalized
+    if not states:
+        return None
+
+    reverse_lock = states.get("reverse_lock")
+    lock_state = (
+        "locked"
+        if reverse_lock in {"locked", "on"}
+        else "unlocked"
+        if reverse_lock in {"unlocked", "off"}
+        else None
+    )
+    raw_door_state = states.get("door_status")
+    door_state = (
+        "open"
+        if raw_door_state in {"open", "on"}
+        else "closed"
+        if raw_door_state in {"closed", "off"}
+        else None
+    )
+    return {
+        "uid": uid,
+        "device_id": packet.get("deviceId") if isinstance(packet.get("deviceId"), str) else "",
+        "door_state": door_state,
+        "lock_state": lock_state,
+        "states": states,
+        "update_time": packet.get("updateTimeSec")
+        if isinstance(packet.get("updateTimeSec"), int)
+        else None,
+    }
+
+
 class OrviboRawEventCapture:
     """Own the background capture thread and its blocking cloud socket."""
 
@@ -127,14 +186,17 @@ class OrviboRawEventCapture:
         email: str,
         password_md5: str,
         family_id: str,
+        capture_raw_events: bool = False,
     ) -> None:
         self._hass = hass
         self._connection = (host, email, password_md5, family_id)
+        self._capture_raw_events = capture_raw_events
         self._salt = secrets.token_bytes(32)
         self._stop_event = Event()
         self._socket_lock = Lock()
         self._client: OrviboBinaryClient | None = None
         self._thread: Thread | None = None
+        self._last_lock_states: dict[str, tuple[object, ...]] = {}
 
     def start(self) -> None:
         """Start capturing without blocking Home Assistant's event loop."""
@@ -147,10 +209,11 @@ class OrviboRawEventCapture:
             daemon=True,
         )
         self._thread.start()
-        _LOGGER.warning(
-            "ORVIBO redacted raw event capture is enabled; captured packet values "
-            "will be written to the Home Assistant log"
-        )
+        if self._capture_raw_events:
+            _LOGGER.warning(
+                "ORVIBO redacted raw event capture is enabled; captured packet values "
+                "will be written to the Home Assistant log"
+            )
 
     async def async_stop(self) -> None:
         """Close the socket and wait for the capture thread to exit."""
@@ -200,8 +263,31 @@ class OrviboRawEventCapture:
             self._stop_event.wait(_RECONNECT_DELAY_SECONDS)
 
     def _capture(self, packet: Mapping[str, Any]) -> None:
-        redacted = redact_packet(packet, self._salt)
-        _LOGGER.warning(
-            "ORVIBO redacted raw event: %s",
-            json.dumps(redacted, ensure_ascii=True, separators=(",", ":")),
-        )
+        lock_event = parse_lock_event(packet)
+        if lock_event is not None:
+            signature = (
+                lock_event["uid"],
+                lock_event["door_state"],
+                lock_event["lock_state"],
+                tuple(sorted(lock_event["states"].items())),
+            )
+            if signature != self._last_lock_states.get(lock_event["uid"]):
+                self._last_lock_states[lock_event["uid"]] = signature
+                self._hass.loop.call_soon_threadsafe(
+                    self._hass.bus.async_fire,
+                    ORVIBO_LOCK_EVENT,
+                    lock_event,
+                )
+                _LOGGER.warning(
+                    "ORVIBO lock event: uid=%s, door_state=%s, lock_state=%s, states=%s",
+                    _fingerprint(lock_event["uid"], self._salt),
+                    lock_event["door_state"],
+                    lock_event["lock_state"],
+                    lock_event["states"],
+                )
+        if self._capture_raw_events:
+            redacted = redact_packet(packet, self._salt)
+            _LOGGER.warning(
+                "ORVIBO redacted raw event: %s",
+                json.dumps(redacted, ensure_ascii=True, separators=(",", ":")),
+            )

@@ -113,5 +113,65 @@ class RawEventSetupStructureTests(unittest.TestCase):
         self.assertIn("credentials were not returned by device discovery", source)
 
 
+class LockEventParserTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls) -> None:
+        cls.capture = _load_capture_module()
+
+    def test_cmd_42_extracts_safe_lock_states(self) -> None:
+        event = self.capture.parse_lock_event(
+        {
+        "cmd":42,
+        "uid":"lock-1",
+        "deviceId":"device-1",
+        "serial":1725,
+        "properties":{
+"door_status":"closed",
+        "reverse_lock":"off",
+        "handle":"down",
+        "ssid":"secret-wifi",
+        },
+        "updateTimeSec":1785419851,
+        }
+        )
+
+        self.assertIsNotNone(event)
+        assert event is not None
+        self.assertEqual(event["uid"], "lock-1")
+        self.assertEqual(event["door_state"], "closed")
+        self.assertEqual(event["lock_state"], "unlocked")
+        self.assertEqual(event["states"], {
+            "door_status":"closed",
+            "reverse_lock":"off",
+            "handle":"down",
+        })
+        self.assertNotIn("ssid", event)
+
+    def test_on_off_door_status_is_normalized(self) -> None:
+        opened = self.capture.parse_lock_event(
+            {"cmd":42, "uid":"lock-1", "properties":{"door_status":"on"}}
+        )
+        closed = self.capture.parse_lock_event(
+            {"cmd":42, "uid":"lock-1", "properties":{"door_status":"off"}}
+        )
+
+        assert opened is not None
+        assert closed is not None
+        self.assertEqual(opened["door_state"], "open")
+        self.assertEqual(closed["door_state"], "closed")
+
+    def test_non_lock_and_unknown_values_are_ignored(self) -> None:
+        self.assertIsNone(self.capture.parse_lock_event({"cmd":53, "uid":"lock-1"}))
+        self.assertIsNone(
+        self.capture.parse_lock_event(
+        {
+        "cmd":42,
+        "uid":"lock-1",
+        "properties":{"door_status":"fingerprint"},
+        }
+        )
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -6,6 +6,7 @@ from typing import Final
 from homeassistant.const import Platform
 
 DOMAIN: Final = "orvibo_cloud"
+ORVIBO_LOCK_EVENT: Final = "orvibo_cloud_lock_event"
 
 CONF_FAMILY_ID: Final = "family_id"
 CONF_HOST: Final = "host"

@@ -49,23 +49,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     )
     entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    if entry.options.get(CONF_RAW_EVENT_CAPTURE, False):
-        binary_user_name = coordinator.data.binary_user_name
-        binary_password = coordinator.data.binary_password
-        if not binary_user_name or not binary_password:
-            _LOGGER.warning(
-                "ORVIBO raw event capture was not started because port-10002 "
-                "credentials were not returned by device discovery"
+    binary_user_name = coordinator.data.binary_user_name
+    binary_password = coordinator.data.binary_password
+    if not binary_user_name or not binary_password:
+        _LOGGER.warning(
+            "ORVIBO push listener was not started because port-10002 "
+            "credentials were not returned by device discovery"
             )
-            return True
-        coordinator.raw_event_capture = OrviboRawEventCapture(
-            hass,
-            entry.data[CONF_HOST],
-            binary_user_name,
-            binary_password,
-            entry.data[CONF_FAMILY_ID],
+        return True
+    coordinator.raw_event_capture = OrviboRawEventCapture(
+        hass,
+        entry.data[CONF_HOST],
+        binary_user_name,
+        binary_password,
+        entry.data[CONF_FAMILY_ID],
+        capture_raw_events=entry.options.get(CONF_RAW_EVENT_CAPTURE, False),
         )
-        coordinator.raw_event_capture.start()
+    coordinator.raw_event_capture.start()
     return True
 
 
