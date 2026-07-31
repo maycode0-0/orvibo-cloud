@@ -112,6 +112,16 @@ class RawEventSetupStructureTests(unittest.TestCase):
         self.assertIn("if not binary_user_name or not binary_password:", source)
         self.assertIn("credentials were not returned by device discovery", source)
 
+    def test_door_sensor_matches_uid_and_device_id(self) -> None:
+        source = (SETUP_PATH.parent / "binary_sensor.py").read_text(encoding="utf-8")
+
+        self.assertIn('event.data.get("uid")', source)
+        self.assertIn('event.data.get("device_id")', source)
+        self.assertIn(
+            "self._device_id not in {event_uid, event_device_id}",
+            source,
+        )
+
 
 class LockEventParserTests(unittest.TestCase):
     @classmethod
@@ -120,19 +130,19 @@ class LockEventParserTests(unittest.TestCase):
 
     def test_cmd_42_extracts_safe_lock_states(self) -> None:
         event = self.capture.parse_lock_event(
-        {
-        "cmd":42,
-        "uid":"lock-1",
-        "deviceId":"device-1",
-        "serial":1725,
-        "properties":{
-"door_status":"closed",
-        "reverse_lock":"off",
-        "handle":"down",
-        "ssid":"secret-wifi",
-        },
-        "updateTimeSec":1785419851,
-        }
+            {
+                "cmd":42,
+                "uid":"lock-1",
+                "deviceId":"device-1",
+                "serial":1725,
+                "properties":{
+                    "door_status":"closed",
+                    "reverse_lock":"off",
+                    "handle":"down",
+                    "ssid":"secret-wifi",
+                },
+                "updateTimeSec":1785419851,
+            }
         )
 
         self.assertIsNotNone(event)
@@ -163,13 +173,13 @@ class LockEventParserTests(unittest.TestCase):
     def test_non_lock_and_unknown_values_are_ignored(self) -> None:
         self.assertIsNone(self.capture.parse_lock_event({"cmd":53, "uid":"lock-1"}))
         self.assertIsNone(
-        self.capture.parse_lock_event(
-        {
-        "cmd":42,
-        "uid":"lock-1",
-        "properties":{"door_status":"fingerprint"},
-        }
-        )
+            self.capture.parse_lock_event(
+                {
+                    "cmd":42,
+                    "uid":"lock-1",
+                    "properties":{"door_status":"fingerprint"},
+                }
+            )
         )
 
 

@@ -83,7 +83,9 @@ class OrviboDoorBinarySensor(OrviboCloudDeviceEntity, BinarySensorEntity):
         return property_switch_state(device.properties, "door_status")
 
     def _handle_lock_event(self, event: Any) -> None:
-        if event.data.get("uid") != self._device_id:
+        event_uid = event.data.get("uid")
+        event_device_id = event.data.get("device_id")
+        if self._device_id not in {event_uid, event_device_id}:
             return
         door_state = event.data.get("door_state")
         if door_state not in {"open", "closed"}:
